@@ -1,0 +1,13 @@
+packages:
+  - .
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+
+overrides:
+  '@vitejs/plugin-react': 5.1.1
+
+onlyBuiltDependencies:
+  - esbuild
+  - sharp

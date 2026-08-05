@@ -1,0 +1,142 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: store-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.9.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm package
+      - run: pnpm verify:release-version
+      - id: version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          artifacts/*
+          --verify-tag
+          --generate-notes
+          --title "OdooHealthExtCS ${GITHUB_REF_NAME}"
+
+  chrome:
+    needs: build
+    if: ${{ vars.CHROME_PUBLISH_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: chrome-store
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.9.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: artifacts
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CWS_SERVICE_ACCOUNT }}
+      - env:
+          CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: pnpm exec node scripts/publish-chrome.mjs
+      - run: echo "Chrome package submitted from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+
+  firefox:
+    needs: build
+    if: ${{ vars.FIREFOX_PUBLISH_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: firefox-amo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.9.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: artifacts
+      - run: pnpm icons && pnpm build:firefox
+      - env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: >-
+          pnpm exec web-ext sign
+          --source-dir .output/firefox-mv3
+          --artifacts-dir signed
+          --channel listed
+          --amo-metadata store/firefox-submission.json
+          --api-key "$WEB_EXT_API_KEY"
+          --api-secret "$WEB_EXT_API_SECRET"
+          --upload-source-code "artifacts/OdooHealthExtCS-v${{ needs.build.outputs.version }}-source.zip"
+          --no-input
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firefox-signed-${{ github.ref_name }}
+          path: signed/*
+          if-no-files-found: error
+          retention-days: 30
+      - run: |
+          echo "Firefox listed submission sent from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+          echo "Review status: https://addons.mozilla.org/developers/addons" >> "$GITHUB_STEP_SUMMARY"
+
+  stores-disabled:
+    needs: build
+    if: ${{ vars.CHROME_PUBLISH_ENABLED != 'true' || vars.FIREFOX_PUBLISH_ENABLED != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "GitHub Release completed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Any store whose publish variable is not true was intentionally skipped." >> "$GITHUB_STEP_SUMMARY"

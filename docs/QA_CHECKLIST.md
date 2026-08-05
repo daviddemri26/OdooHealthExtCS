@@ -1,0 +1,53 @@
+# QA Checklist
+
+Use sanitized synthetic fixtures for automated and visual testing. Use an approved noncritical Odoo record only for the final controlled-write checks. Never save screenshots or captures containing customer data in this repository.
+
+## Automated package
+
+- [ ] `pnpm package` succeeds on Node 22 and pnpm 10.
+- [ ] Unit and DOM tests pass.
+- [ ] Chrome and Firefox manifests are MV3, request only `storage`, and match only `https://www.odoo.com/odoo*`.
+- [ ] Firefox `web-ext lint` passes.
+- [ ] Sensitive-data scan passes.
+- [ ] Three deterministic ZIP files, checksums, and release manifest exist.
+
+## Routing and lifecycle
+
+- [ ] No extension code runs on `https://www.odoo.com/`, portal, docs, shop, checkout, or any non-`/odoo` path.
+- [ ] Direct subscription and nested `sale.order` routes mount once.
+- [ ] Navigating to the linked contact unmounts subscription controls.
+- [ ] Browser back/forward, Odoo breadcrumbs, record next/previous, and repeated rerenders do not duplicate UI.
+
+## Account health
+
+- [ ] Not set, High, Medium, Low, and duplicate states are both visually and textually distinct.
+- [ ] Selecting a state preserves every unrelated tag and leaves exactly one canonical health tag.
+- [ ] Selecting the active state clears health.
+- [ ] A later selection cleans duplicate health tags.
+- [ ] Missing or ambiguous canonical tags disable writes.
+- [ ] Access errors, expired session, missing fields, and failed writes are sanitized.
+- [ ] Undo works within seven seconds and refuses after an external change.
+
+## Industry
+
+- [ ] Drawer reads the exact subscription `partner_id`, including contact/company distinctions.
+- [ ] Choices load dynamically and sort correctly.
+- [ ] Search, No industry, current highlighting, Tab, Enter, Arrow Up/Down, and Escape work.
+- [ ] Set, clear, and Undo behave correctly; Undo refuses after an external change.
+- [ ] No navigation to the contact is required.
+
+## Interface matrix
+
+- [ ] Latest Chrome and Firefox.
+- [ ] Odoo light and dark modes; extension Auto, Light, and Dark.
+- [ ] Desktop widths 1280, 1440, 1920, and a narrow 1024 layout.
+- [ ] 100%, 125%, and 150% zoom.
+- [ ] Visible focus, screen-reader labels, reduced motion, no Odoo click blocking, and no clipped drawer/status UI.
+
+## Release and privacy
+
+- [ ] Final icon is legible at 16 px and the canonical SVG is approved.
+- [ ] Public docs, screenshots, sources, and archives contain no captures, customer information, session data, secrets, or remote executable code.
+- [ ] Pages URLs load and store copy matches current behavior.
+- [ ] Tag, package, and both manifest versions match.
+- [ ] GitHub Release assets are permanent; enabled store submissions are recorded.

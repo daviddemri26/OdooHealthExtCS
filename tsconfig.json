@@ -7,6 +7,7 @@
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
+    ".wxt/wxt.d.ts",
     "entrypoints/**/*.ts",
     "entrypoints/**/*.tsx",
     "src/**/*.ts",

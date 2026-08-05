@@ -1,0 +1,279 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 370px;
+  min-height: 560px;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.popup {
+  --background: #f6f4f6;
+  --surface: #ffffff;
+  --text: #29262b;
+  --muted: #757079;
+  --border: rgba(73, 58, 69, 0.12);
+  --accent: #714b67;
+  --accent-soft: #eee6ec;
+  min-height: 560px;
+  padding: 20px;
+  color: var(--text);
+  background: var(--background);
+}
+
+.popup.theme-dark {
+  --background: #222530;
+  --surface: #2e323e;
+  --text: #f4f1f4;
+  --muted: #b2adb6;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #c3a5b9;
+  --accent-soft: rgba(195, 165, 185, 0.12);
+}
+
+.popup-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.popup-header img {
+  border-radius: 11px;
+}
+
+.popup-header h1 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.popup-header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.save-state {
+  position: absolute;
+  top: 0;
+  right: 0;
+  color: #4e956e;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.save-state.is-visible {
+  opacity: 1;
+}
+
+section {
+  margin-top: 17px;
+}
+
+section h2 {
+  margin: 0 0 7px 2px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.master-section,
+.settings-card,
+.appearance-control,
+.diagnostics,
+.privacy-note {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+}
+
+.master-section {
+  margin-top: 0;
+}
+
+.setting-row {
+  position: relative;
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 13px;
+  cursor: pointer;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--border);
+}
+
+.setting-row > span:first-child {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-row strong {
+  font-size: 13px;
+}
+
+.setting-row small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.setting-row input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 99px;
+  transition: background 160ms ease;
+}
+
+.switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  content: '';
+  transition: transform 160ms ease;
+}
+
+.setting-row input:checked + .switch {
+  background: var(--accent);
+}
+
+.setting-row input:checked + .switch::after {
+  transform: translateX(16px);
+}
+
+.setting-row input:focus-visible + .switch {
+  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.setting-row.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.appearance-control {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+}
+
+.appearance-control button {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.appearance-control button.is-active {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.diagnostics {
+  padding: 11px 13px;
+}
+
+.diagnostics h2 {
+  margin-left: 0;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.status-line > span:first-child {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.status-ready {
+  background: #52a275;
+}
+
+.status-neutral {
+  background: #9a929b;
+}
+
+.privacy-note {
+  margin-top: 17px;
+  padding: 12px 13px;
+}
+
+.privacy-note strong {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.privacy-note p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 1ms !important;
+  }
+}
