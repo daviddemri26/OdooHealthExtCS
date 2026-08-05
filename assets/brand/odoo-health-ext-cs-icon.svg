@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">OdooHealthExtCS extension icon</title>
+  <desc id="desc">A purple O containing a rounded green medical cross.</desc>
+  <path
+    d="M 512 64 A 448 448 0 1 1 512 960 A 448 448 0 1 1 512 64 Z M 512 230 A 282 282 0 1 1 512 794 A 282 282 0 1 1 512 230 Z"
+    fill="#714B67"
+    fill-rule="evenodd"
+  />
+  <rect x="448" y="330" width="128" height="364" rx="52" fill="#21B799" />
+  <rect x="330" y="448" width="364" height="128" rx="52" fill="#21B799" />
+</svg>

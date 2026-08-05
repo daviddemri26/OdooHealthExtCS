@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.output/
+.wxt/
+artifacts/
+coverage/
+node_modules/
+web-ext-artifacts/
+*.pem
+*.key
+*.crx
+*.xpi

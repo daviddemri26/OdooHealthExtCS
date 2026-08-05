@@ -1,0 +1,7 @@
+.output
+.wxt
+artifacts
+coverage
+node_modules
+pnpm-lock.yaml
+public/icons
