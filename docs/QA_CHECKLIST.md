@@ -55,7 +55,9 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] 100%, 125%, and 150% zoom.
 - [ ] The framed Industry and Health panel is attached to the form-sheet top edge and horizontally tied to the contract number with chatter open/closed, at every tested width and zoom.
 - [ ] The frame shrinks when a shorter industry is selected and expands only up to the safe native-layout limit for longer content.
-- [ ] Long industry names truncate before the native subscription-state badge and remain fully discoverable in the dropdown.
+- [ ] Long industry names truncate before the native subscription-state badge, while every dropdown option remains fully readable.
+- [ ] Health and Industry selections update immediately and roll back visibly after a simulated failed write.
+- [ ] Firefox positions the panel beside the visible contract number rather than beside the status badge.
 - [ ] The panel scrolls with the Odoo form and stays below sticky action bars, user-preference dialogs, email composers, and other native modals.
 - [ ] Industry hover changes only the link color and never adds an underline.
 - [ ] Chrome shows no unused popup area and neither browser requires scrolling to read the popup footer.

@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Relaxed the visual-anchor contract for Firefox's flatter `sale.order` markup and selected the visible Odoo fields across duplicate responsive nodes.
 - Made the inline panel shrink to its current Industry and Health content up to the safe native-layout limit.
 - Changed enabled settings switches to a conventional green state.
+- Expanded the Industry picker independently from the compact field frame so every option remains readable.
+- Added optimistic Health and Industry updates with automatic rollback when Odoo rejects a write.
+- Corrected Firefox positioning by measuring the visible contract text instead of its full-width heading container.
 
 ### Security
 

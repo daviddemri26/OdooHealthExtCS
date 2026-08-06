@@ -86,7 +86,7 @@ describe('native Odoo field anchor', () => {
     contract.getBoundingClientRect = () => rect(40, 165, 0, 0);
     expect(measureOrderDateAnchor(document)).toMatchObject({
       top: 0,
-      left: 345.6,
+      left: 312,
       maxWidth: 440,
     });
   });
@@ -132,6 +132,23 @@ describe('native Odoo field anchor', () => {
     });
   });
 
+  it('measures Firefox title text instead of its full-width heading box', () => {
+    document.querySelector('[name="client_order_ref"]')?.remove();
+    const heading = document.querySelector<HTMLElement>('h1')!;
+    heading.textContent = 'SO2026/7221584';
+    heading.style.fontSize = '40px';
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
+    heading.getBoundingClientRect = () => rect(40, 165, 1040, 48);
+    sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
+    status.getBoundingClientRect = () => rect(900, 165, 90, 21);
+
+    const anchor = measureOrderDateAnchor(document);
+    expect(anchor).not.toBeNull();
+    expect(anchor!.left).toBeCloseTo(411.2);
+    expect(anchor!.left).toBeLessThan(600);
+  });
+
   it('supports the flatter sale-order field structure rendered in Firefox', () => {
     document.querySelector('.o_inner_group')!.innerHTML = `
       <label style="color: rgb(80, 80, 80)">Order Date</label>
@@ -168,7 +185,7 @@ describe('native Odoo field anchor', () => {
 
     expect(measureOrderDateAnchor(document)).toMatchObject({
       top: 0,
-      left: 345.6,
+      left: 312,
       maxWidth: 440,
     });
   });

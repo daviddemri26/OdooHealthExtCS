@@ -5,6 +5,7 @@ import {
   applyHealthChange,
   getHealthSnapshot,
   loadHealthContext,
+  prepareHealthTagIds,
   undoHealthChange,
   type HealthContext,
 } from '../features/health/service';
@@ -195,7 +196,7 @@ export function HealthControl({
                 aria-label={action}
                 aria-pressed={active}
                 title={action}
-                disabled={loading || pending || Boolean(error)}
+                disabled={loading || Boolean(error)}
                 onClick={() => onSelect(state)}
               >
                 <span className="sr-only">{label}</span>
@@ -362,7 +363,7 @@ export function IndustryField({
                 role="option"
                 aria-selected={context?.currentIndustryId === null}
                 className={context?.currentIndustryId === null ? 'is-selected' : ''}
-                disabled={loading || pending || Boolean(error)}
+                disabled={loading || Boolean(error)}
                 onClick={() => onSelect(null)}
               >
                 <span>No industry</span>
@@ -379,7 +380,7 @@ export function IndustryField({
                   role="option"
                   aria-selected={context?.currentIndustryId === industry.id}
                   className={context?.currentIndustryId === industry.id ? 'is-selected' : ''}
-                  disabled={pending || Boolean(error)}
+                  disabled={Boolean(error)}
                   onClick={() => onSelect(industry.id)}
                 >
                   <span>{industry.name}</span>
@@ -508,6 +509,9 @@ export function ContentApp({
   const selectHealth = async (selected: Exclude<HealthState, null>): Promise<void> => {
     if (!route || !health || healthPending) return;
     const next = !health.snapshot.duplicate && health.snapshot.state === selected ? null : selected;
+    const previousHealth = health;
+    const optimisticIds = prepareHealthTagIds(health.snapshot.tagIds, health.tags, next);
+    setHealth({ ...health, snapshot: getHealthSnapshot(optimisticIds, health.tags) });
     setHealthPending(true);
     try {
       const change = await applyHealthChange(
@@ -517,7 +521,6 @@ export function ContentApp({
         health.snapshot.tagIds,
         next,
       );
-      setHealth({ ...health, snapshot: getHealthSnapshot(change.applied, health.tags) });
       const message = next
         ? `Account health set to ${next[0]?.toUpperCase()}${next.slice(1)}.`
         : 'Account health cleared.';
@@ -540,7 +543,10 @@ export function ContentApp({
                   );
                   return;
                 }
-                setHealth({ ...health, snapshot: getHealthSnapshot(change.before, health.tags) });
+                setHealth({
+                  ...previousHealth,
+                  snapshot: getHealthSnapshot(change.before, previousHealth.tags),
+                });
                 notify(
                   createMessage('info', 'Previous account health restored.', {
                     dismissAfterMs: 4_000,
@@ -556,6 +562,7 @@ export function ContentApp({
         }),
       );
     } catch (error) {
+      setHealth(previousHealth);
       const failure = publicError(error);
       notify(createMessage('error', failure.message));
       await setCompatibilityStatus(false, failure.code);
@@ -569,11 +576,12 @@ export function ContentApp({
       if (industry?.currentIndustryId === industryId) setIndustryOpen(false);
       return;
     }
+    const previousIndustry = industry;
+    setIndustry({ ...industry, currentIndustryId: industryId });
+    setIndustryOpen(false);
     setIndustryPending(true);
     try {
       const change = await applyIndustryChange(gateway, industry, industryId);
-      setIndustry({ ...industry, currentIndustryId: industryId });
-      setIndustryOpen(false);
       const selectedName =
         industry.industries.find((candidate) => candidate.id === industryId)?.name ?? 'No industry';
       notify(
@@ -593,7 +601,7 @@ export function ContentApp({
                   );
                   return;
                 }
-                setIndustry({ ...industry, currentIndustryId: change.before });
+                setIndustry({ ...previousIndustry, currentIndustryId: change.before });
                 notify(
                   createMessage('info', 'Previous industry restored.', {
                     dismissAfterMs: 4_000,
@@ -609,6 +617,7 @@ export function ContentApp({
         }),
       );
     } catch (error) {
+      setIndustry(previousIndustry);
       const failure = publicError(error);
       notify(createMessage('error', failure.message));
       await setCompatibilityStatus(false, failure.code);

@@ -18,6 +18,8 @@ The visual controls locate the visible native `[name="date_order"]` widget and c
 
 The panel uses a low local stack level and no top border, visually joining the form sheet boundary while remaining below Odoo sticky controls and dialogs. The Industry dropdown is layered only inside this local panel. The fixed status host uses a normal application-level stack instead of a maximum integer stack.
 
+The compact frame fits its current content, while the Industry picker can expand independently so complete option labels remain visible. Firefox sometimes reports the contract heading as a full-width block; positioning therefore measures the rendered title text, with a typography-based fallback, instead of trusting the block width.
+
 `FeatureModule` defines the reusable eligibility and lifecycle contract for future modules. The initial React implementation shares one mount while the health and industry services remain independently enabled and isolated.
 
 ## Odoo RPC
@@ -52,6 +54,8 @@ The industry service validates `res.partner.industry_id`, reads `sale.order.part
 ## Status and Undo
 
 `StatusMessage` supports success, error, warning, info, an optional secondary detail, and an optional asynchronous action. Each message uses a kind-specific outline and a prominent primary line. Every kind closes automatically: success after seven seconds, errors and warnings after eight seconds, and informational messages after six seconds. The countdown pauses while the pointer remains over the message and resumes with the remaining time. Health confirmations explain on separate detail lines that the extension indicator is current immediately while Odoo's native Tags widget refreshes on the next page reload. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
+
+Health and Industry selections update the local interface before the allow-listed RPC completes. A failed write restores the exact previous snapshot and reports the sanitized error.
 
 ## Adding a feature
 

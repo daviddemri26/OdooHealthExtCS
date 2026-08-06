@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HealthControl, IndustryField, StatusBar } from '../src/content/ContentApp';
@@ -63,6 +63,47 @@ describe('content controls', () => {
     fireEvent.change(search, { target: { value: 'tech' } });
     expect(screen.getByRole('option', { name: /Technology/ })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /Education/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps health and industry choices enabled while a write is pending', () => {
+    const view = render(
+      <HealthControl
+        context={{
+          tags: { high: 1, medium: 2, low: 3 },
+          snapshot: { tagIds: [1], state: 'high', duplicate: false },
+        }}
+        loading={false}
+        pending
+        error={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(within(view.container).getByRole('button', { name: 'Set health to Low' })).toBeEnabled();
+
+    view.rerender(
+      <IndustryField
+        context={{
+          partnerId: 81,
+          partnerName: 'Demo Customer',
+          currentIndustryId: 2,
+          industries: [
+            { id: 2, name: 'Education' },
+            { id: 3, name: 'Health / Social Welfare / Pharmaceutical' },
+          ],
+        }}
+        open
+        loading={false}
+        pending
+        error={null}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      within(view.container).getByRole('option', {
+        name: 'Health / Social Welfare / Pharmaceutical',
+      }),
+    ).toBeEnabled();
   });
 
   it('runs an undo action and allows dismissal', async () => {
