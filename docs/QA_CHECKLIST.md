@@ -31,6 +31,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 
 - [ ] Not set, High, Medium, Low, and duplicate states are both visually and textually distinct.
 - [ ] Health controls appear in Low, Medium, High order as macOS red, yellow, and green circles without letters; the current state text appears to their right.
+- [ ] Health circles keep exactly the same size on hover and focus; only the selected value has a surrounding ring.
 - [ ] Selecting a state preserves every unrelated tag and leaves exactly one canonical health tag.
 - [ ] Selecting the active state clears health.
 - [ ] A later selection cleans duplicate health tags.
@@ -52,10 +53,14 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Odoo light and dark modes; extension Auto, Light, and Dark.
 - [ ] Desktop widths 1280, 1440, 1920, and a narrow 1024 layout.
 - [ ] 100%, 125%, and 150% zoom.
-- [ ] The framed Industry and Health panel remains vertically tied to Order Date and horizontally tied to the contract number with chatter open/closed, at every tested width and zoom.
+- [ ] The framed Industry and Health panel is attached to the form-sheet top edge and horizontally tied to the contract number with chatter open/closed, at every tested width and zoom.
 - [ ] Long industry names truncate before the native subscription-state badge and remain fully discoverable in the dropdown.
+- [ ] The panel scrolls with the Odoo form and stays below sticky action bars, user-preference dialogs, email composers, and other native modals.
+- [ ] Industry hover changes only the link color and never adds an underline.
 - [ ] Chrome shows no unused popup area and neither browser requires scrolling to read the popup footer.
-- [ ] Success and error status messages dismiss automatically; Health confirmation explains the delayed native Tags-widget refresh.
+- [ ] Success and error status messages use a colored outline, a prominent primary line, and dismiss automatically; Health confirmation explains the delayed native Tags-widget refresh.
+- [ ] Hovering a status message pauses its dismissal timer; leaving resumes from the remaining time.
+- [ ] The panel appears on equivalent Chrome and Firefox subscription forms, including forms where Odoo renders only the `h1` contract title.
 - [ ] Visible focus, screen-reader labels, reduced motion, no Odoo click blocking, and no clipped dropdown/status UI.
 
 ## Release and privacy

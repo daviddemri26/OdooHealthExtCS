@@ -1,7 +1,7 @@
 import { createRoot, type Root } from 'react-dom/client';
 
 import { ContentApp } from '../src/content/ContentApp';
-import { createExtensionHost } from '../src/content/host';
+import { attachPanelHost, createExtensionHost } from '../src/content/host';
 import contentStyles from '../src/content/styles.css?inline';
 import { isRenderedSubscriptionForm, parseSubscriptionRoute } from '../src/odoo/routes';
 import { PageContextOdooGateway } from '../src/odoo/gateway';
@@ -40,7 +40,10 @@ export default defineContentScript({
   matches: ['https://www.odoo.com/odoo*'],
   runAt: 'document_idle',
   main(ctx) {
-    const { host, container } = createExtensionHost(ROOT_ID, contentStyles);
+    const { host, container, panelHost, panelContainer } = createExtensionHost(
+      ROOT_ID,
+      contentStyles,
+    );
     const gateway = new PageContextOdooGateway();
 
     const root: Root = createRoot(container);
@@ -49,6 +52,7 @@ export default defineContentScript({
     let scheduled = 0;
 
     const render = (): void => {
+      attachPanelHost(panelHost);
       root.render(
         <ContentApp
           gateway={gateway}
@@ -56,6 +60,7 @@ export default defineContentScript({
           settings={settings}
           detectedTheme={detectOdooTheme()}
           anchor={measureOrderDateAnchor()}
+          panelContainer={panelContainer}
         />,
       );
     };
@@ -87,7 +92,6 @@ export default defineContentScript({
     window.addEventListener('popstate', scheduleRender);
     window.addEventListener('hashchange', scheduleRender);
     window.addEventListener('resize', scheduleRender);
-    window.addEventListener('scroll', scheduleRender, { passive: true });
     const colorScheme = matchMedia('(prefers-color-scheme: dark)');
     colorScheme.addEventListener('change', scheduleRender);
 
@@ -102,9 +106,9 @@ export default defineContentScript({
       window.removeEventListener('popstate', scheduleRender);
       window.removeEventListener('hashchange', scheduleRender);
       window.removeEventListener('resize', scheduleRender);
-      window.removeEventListener('scroll', scheduleRender);
       colorScheme.removeEventListener('change', scheduleRender);
       root.unmount();
+      panelHost.remove();
       host.remove();
     });
   },

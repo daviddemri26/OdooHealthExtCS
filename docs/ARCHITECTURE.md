@@ -4,7 +4,7 @@
 
 WXT generates Chrome/Chromium and Firefox Manifest V3 builds from one React and TypeScript codebase. Both content scripts match only `https://www.odoo.com/odoo*`. There is no background worker, remote executable code, external service, cookie permission, or host permission.
 
-The isolated content script runs at `document_idle`, creates one fixed host, and attaches an open Shadow DOM. All extension styles and React nodes stay inside that boundary; the host itself ignores pointer events while interactive controls opt in.
+The isolated content script runs at `document_idle` and creates two open Shadow DOM hosts. A low-layer panel host is appended directly to Odoo's active `.o_form_sheet`, so the compact controls share the form's scroll and stacking context. A separate fixed host contains only transient status messages. All extension styles and React nodes stay inside those boundaries; the hosts ignore pointer events while interactive controls opt in.
 
 A separate script runs at `document_start` with `world: "MAIN"`. It shares the Odoo page's execution environment only so authenticated same-origin RPC requests use the active page session. It has no UI or extension API access. A versioned singleton replaces a stale listener after development reloads.
 
@@ -14,7 +14,9 @@ A separate script runs at `document_start` with `world: "MAIN"`. It shares the O
 
 Odoo is a single-page application. The entrypoint watches DOM changes, URL changes, history events, viewport changes, and theme changes, then schedules an idempotent render. Feature state resets when the active sale order changes. The UI mounts only when a rendered Odoo form includes `partner_id` and either a subscription route or `subscription_state`.
 
-The visual controls locate the native `[name="date_order"]` widget and visible `[name="client_order_ref"]` contract number on each render. Order Date provides the vertical position and Odoo typography; the contract number provides the horizontal position. The compact framed panel begins 48 pixels after the rendered contract number and caps its right edge before the native `subscription_state` badge. Industry appears first and Health second. This keeps long industry names away from the status badge while still following chatter, zoom, responsive width, scrolling, and SPA rerenders. If the required anchors are absent, offscreen, or leave less than 260 pixels of safe width, the controls do not fall back to an unrelated position.
+The visual controls locate the native `[name="date_order"]` widget and the visible contract title on each render. The preferred title anchor is `[name="client_order_ref"]`; the form's `h1` is a Firefox-tolerant fallback when Odoo omits that wrapper. Order Date provides Odoo typography, and the title provides the horizontal position. The compact framed panel attaches to the top edge of the form sheet, begins 48 pixels after the rendered title, and caps its right edge before the native `subscription_state` badge. Industry appears first and Health second. This keeps long industry names away from the status badge while still following chatter, zoom, responsive width, native scrolling, and SPA rerenders. If the required anchors are absent or leave less than 260 pixels of safe width, the controls do not fall back to an unrelated position.
+
+The panel uses a low local stack level and no top border, visually joining the form sheet boundary while remaining below Odoo sticky controls and dialogs. The Industry dropdown is layered only inside this local panel. The fixed status host uses a normal application-level stack instead of a maximum integer stack.
 
 `FeatureModule` defines the reusable eligibility and lifecycle contract for future modules. The initial React implementation shares one mount while the health and industry services remain independently enabled and isolated.
 
@@ -41,7 +43,7 @@ Duplicate health tags display a warning and an indeterminate textual state. The 
 
 ## Industry
 
-The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact ID for all reads and writes. Choices come dynamically from `res.partner.industry`; clearing writes `false`. The current value appears as an Odoo-style link above Health. Clicking it opens a compact anchored dropdown with search, outside-click dismissal, native Tab/Enter behavior, Arrow Up/Down option movement, Escape to close, and current-selection semantics.
+The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact ID for all reads and writes. Choices come dynamically from `res.partner.industry`; clearing writes `false`. The current value appears as an Odoo-style link above Health. Clicking it opens a compact anchored dropdown with search, outside-click dismissal, native Tab behavior, explicit Arrow Up/Down option movement, Enter selection, Escape to close, and current-selection semantics.
 
 ## Settings and compatibility
 
@@ -49,7 +51,7 @@ The industry service validates `res.partner.industry_id`, reads `sale.order.part
 
 ## Status and Undo
 
-`StatusMessage` supports success, error, warning, info, and an optional asynchronous action. Successful writes show Undo for seven seconds; errors remain dismissible and also close automatically after eight seconds. Health confirmations explain that the extension indicator is current immediately while Odoo's native Tags widget refreshes on the next page reload. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
+`StatusMessage` supports success, error, warning, info, an optional secondary detail, and an optional asynchronous action. Each message uses a kind-specific outline and a prominent primary line. Successful writes show Undo for seven seconds; errors remain dismissible and also close automatically after eight seconds. The countdown pauses while the pointer remains over the message and resumes with the remaining time. Health confirmations explain in a lighter second line that the extension indicator is current immediately while Odoo's native Tags widget refreshes on the next page reload. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
 
 ## Adding a feature
 

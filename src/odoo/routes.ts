@@ -52,12 +52,31 @@ export function isRenderedSubscriptionForm(pathname: string, root: ParentNode = 
 }
 
 export function findOrderDateAnchor(root: ParentNode = document): HTMLElement | null {
-  return root.querySelector<HTMLElement>('.o_form_view [name="date_order"]');
+  const candidates = Array.from(
+    root.querySelectorAll<HTMLElement>('.o_form_view [name="date_order"]'),
+  );
+  return (
+    candidates.find((candidate) => {
+      const bounds = candidate.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0;
+    }) ??
+    candidates[0] ??
+    null
+  );
 }
 
 export function findContractNumberAnchor(root: ParentNode = document): HTMLElement | null {
+  const candidates = [
+    ...root.querySelectorAll<HTMLElement>('.o_form_view h1 [name="client_order_ref"] span'),
+    ...root.querySelectorAll<HTMLElement>('.o_form_view h1 [name="client_order_ref"]'),
+    ...root.querySelectorAll<HTMLElement>('.o_form_view .o_form_sheet h1'),
+  ];
   return (
-    root.querySelector<HTMLElement>('.o_form_view h1 [name="client_order_ref"] span') ??
-    root.querySelector<HTMLElement>('.o_form_view h1 [name="client_order_ref"]')
+    candidates.find((candidate) => {
+      const bounds = candidate.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0;
+    }) ??
+    candidates[0] ??
+    null
   );
 }

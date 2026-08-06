@@ -46,19 +46,16 @@ button {
 }
 
 .native-field-stack {
-  position: fixed;
-  z-index: 2147483001;
+  position: absolute;
+  z-index: 2;
   display: grid;
   align-items: center;
   padding: 6px 10px;
   pointer-events: none;
   background: color-mix(in srgb, var(--surface-raised) 34%, transparent);
   border: 1px solid var(--border);
-  border-radius: 5px;
-  transition:
-    bottom 120ms ease,
-    left 120ms ease,
-    width 120ms ease;
+  border-top: 0;
+  border-radius: 0 0 5px 5px;
 }
 
 .native-field-label,
@@ -107,8 +104,7 @@ button {
   cursor: pointer;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
   transition:
-    transform 120ms ease,
-    opacity 120ms ease,
+    filter 120ms ease,
     box-shadow 120ms ease;
 }
 
@@ -116,7 +112,6 @@ button {
 .health-dot:focus-visible:not(:disabled) {
   outline: none;
   filter: brightness(1.08);
-  transform: scale(1.12);
 }
 
 .health-dot:focus-visible {
@@ -129,7 +124,6 @@ button {
   box-shadow:
     0 0 0 2px var(--surface-raised),
     0 0 0 3px currentColor;
-  transform: scale(1.04);
 }
 
 .health-dot:disabled {
@@ -168,6 +162,7 @@ button {
   background: transparent;
   border: 0;
   cursor: pointer;
+  transition: color 120ms ease;
 }
 
 .industry-trigger > span:first-child {
@@ -176,8 +171,12 @@ button {
   white-space: nowrap;
 }
 
-.industry-trigger:hover:not(:disabled) > span:first-child {
-  text-decoration: underline;
+.industry-trigger:hover:not(:disabled) {
+  color: color-mix(
+    in srgb,
+    var(--odoo-link-color, #00a09d) 76%,
+    var(--odoo-value-color, var(--text))
+  );
 }
 
 .industry-trigger:focus-visible {
@@ -204,7 +203,7 @@ button {
 
 .industry-popover {
   position: absolute;
-  z-index: 2147483003;
+  z-index: 3;
   top: calc(100% + 4px);
   left: -8px;
   display: flex;
@@ -298,8 +297,9 @@ button {
 }
 
 .status-bar {
+  --status-color: #7190a9;
   position: fixed;
-  z-index: 2147483004;
+  z-index: 1;
   bottom: 22px;
   left: 50%;
   display: flex;
@@ -310,7 +310,7 @@ button {
   padding: 8px 9px 8px 13px;
   pointer-events: auto;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 2px solid var(--status-color);
   border-radius: 9px;
   box-shadow: var(--shadow);
   animation: status-enter 180ms ease-out;
@@ -318,30 +318,37 @@ button {
   transform: translateX(-50%);
 }
 
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  background: #7190a9;
-  border-radius: 50%;
+.status-success {
+  --status-color: #55a477;
 }
 
-.status-success .status-indicator {
-  background: #55a477;
+.status-error {
+  --status-color: #bd626a;
 }
 
-.status-error .status-indicator {
-  background: #bd626a;
-}
-
-.status-warning .status-indicator {
-  background: #c59045;
+.status-warning {
+  --status-color: #c59045;
 }
 
 .status-copy {
+  display: flex;
   flex: 1;
-  font-size: 13px;
-  font-weight: 600;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.status-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.status-detail {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .status-action {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   applyHealthChange,
@@ -30,12 +31,13 @@ interface ContentAppProps {
   settings: ExtensionSettings;
   detectedTheme: 'light' | 'dark';
   anchor: OdooFieldAnchor | null;
+  panelContainer: HTMLElement;
 }
 
 function createMessage(
   kind: StatusMessage['kind'],
   message: string,
-  options: Pick<StatusMessage, 'action' | 'dismissAfterMs'> = {},
+  options: Pick<StatusMessage, 'action' | 'detail' | 'dismissAfterMs'> = {},
 ): StatusMessage {
   return {
     id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
@@ -58,16 +60,49 @@ export function StatusBar({
   status: StatusMessage | null;
   onDismiss: () => void;
 }): React.JSX.Element | null {
+  const timerRef = useRef<number | null>(null);
+  const remainingRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const hoveringRef = useRef(false);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const startTimer = useCallback(() => {
+    clearTimer();
+    if (remainingRef.current <= 0 || hoveringRef.current) return;
+    startedAtRef.current = Date.now();
+    timerRef.current = window.setTimeout(onDismiss, remainingRef.current);
+  }, [clearTimer, onDismiss]);
+
   useEffect(() => {
     const dismissAfterMs = status?.dismissAfterMs ?? (status?.kind === 'error' ? 8_000 : undefined);
-    if (!dismissAfterMs) return;
-    const timer = window.setTimeout(onDismiss, dismissAfterMs);
-    return () => window.clearTimeout(timer);
-  }, [onDismiss, status]);
+    clearTimer();
+    remainingRef.current = dismissAfterMs ?? 0;
+    if (!status) hoveringRef.current = false;
+    if (dismissAfterMs) startTimer();
+    return clearTimer;
+  }, [clearTimer, startTimer, status]);
 
   const [acting, setActing] = useState(false);
 
   if (!status) return null;
+
+  const pauseTimer = (): void => {
+    hoveringRef.current = true;
+    if (timerRef.current === null) return;
+    remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAtRef.current));
+    clearTimer();
+  };
+
+  const resumeTimer = (): void => {
+    hoveringRef.current = false;
+    startTimer();
+  };
 
   const runAction = async (): Promise<void> => {
     if (!status.action || acting) return;
@@ -80,9 +115,17 @@ export function StatusBar({
   };
 
   return (
-    <div className={`status-bar status-${status.kind}`} role="status" aria-live="polite">
-      <span className="status-indicator" aria-hidden="true" />
-      <span className="status-copy">{status.message}</span>
+    <div
+      className={`status-bar status-${status.kind}`}
+      role="status"
+      aria-live="polite"
+      onMouseEnter={pauseTimer}
+      onMouseLeave={resumeTimer}
+    >
+      <span className="status-copy">
+        <strong className="status-title">{status.message}</strong>
+        {status.detail ? <span className="status-detail">{status.detail}</span> : null}
+      </span>
       {status.action ? (
         <button className="status-action" type="button" disabled={acting} onClick={runAction}>
           {acting ? 'Working…' : status.action.label}
@@ -226,7 +269,10 @@ export function IndustryField({
       ) ?? [],
     );
     if (options.length === 0) return;
-    const current = options.indexOf(document.activeElement as HTMLButtonElement);
+    const rootNode = listRef.current?.getRootNode();
+    const activeElement =
+      rootNode instanceof ShadowRoot ? rootNode.activeElement : document.activeElement;
+    const current = options.indexOf(activeElement as HTMLButtonElement);
     const next =
       current < 0
         ? direction === 1
@@ -245,6 +291,20 @@ export function IndustryField({
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       moveOptionFocus(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (event.key === 'Enter') {
+      const rootNode = listRef.current?.getRootNode();
+      const activeElement =
+        rootNode instanceof ShadowRoot ? rootNode.activeElement : document.activeElement;
+      if (
+        activeElement instanceof HTMLButtonElement &&
+        activeElement.matches('button[role="option"]:not(:disabled)') &&
+        listRef.current?.contains(activeElement)
+      ) {
+        event.preventDefault();
+        activeElement.click();
+      }
     }
   };
 
@@ -338,6 +398,7 @@ export function ContentApp({
   settings,
   detectedTheme,
   anchor,
+  panelContainer,
 }: ContentAppProps): React.JSX.Element | null {
   const [health, setHealth] = useState<HealthContext | null>(null);
   const [industry, setIndustry] = useState<IndustryContext | null>(null);
@@ -452,40 +513,38 @@ export function ContentApp({
         ? `Account health set to ${next[0]?.toUpperCase()}${next.slice(1)}.`
         : 'Account health cleared.';
       notify(
-        createMessage(
-          'success',
-          `${message} The health indicator above shows the current value. Odoo’s Tags field will update after the next page reload.`,
-          {
-            dismissAfterMs: 7_000,
-            action: {
-              label: 'Undo',
-              run: async () => {
-                try {
-                  const restored = await undoHealthChange(gateway, route.recordId, change);
-                  if (!restored) {
-                    notify(
-                      createMessage(
-                        'warning',
-                        'Undo was not applied because the record changed elsewhere.',
-                      ),
-                    );
-                    return;
-                  }
-                  setHealth({ ...health, snapshot: getHealthSnapshot(change.before, health.tags) });
+        createMessage('success', message, {
+          detail:
+            'The health indicator above is current. Odoo’s Tags field will update after the next page reload.',
+          dismissAfterMs: 7_000,
+          action: {
+            label: 'Undo',
+            run: async () => {
+              try {
+                const restored = await undoHealthChange(gateway, route.recordId, change);
+                if (!restored) {
                   notify(
-                    createMessage('info', 'Previous account health restored.', {
-                      dismissAfterMs: 4_000,
-                    }),
+                    createMessage(
+                      'warning',
+                      'Undo was not applied because the record changed elsewhere.',
+                    ),
                   );
-                } catch (error) {
-                  const failure = publicError(error);
-                  notify(createMessage('error', failure.message));
-                  await setCompatibilityStatus(false, failure.code);
+                  return;
                 }
-              },
+                setHealth({ ...health, snapshot: getHealthSnapshot(change.before, health.tags) });
+                notify(
+                  createMessage('info', 'Previous account health restored.', {
+                    dismissAfterMs: 4_000,
+                  }),
+                );
+              } catch (error) {
+                const failure = publicError(error);
+                notify(createMessage('error', failure.message));
+                await setCompatibilityStatus(false, failure.code);
+              }
             },
           },
-        ),
+        }),
       );
     } catch (error) {
       const failure = publicError(error);
@@ -554,7 +613,7 @@ export function ContentApp({
   const theme = settings.appearance === 'auto' ? detectedTheme : settings.appearance;
   const nativeFieldStyle = anchor
     ? ({
-        bottom: anchor.bottom,
+        top: anchor.top,
         left: anchor.left,
         width: anchor.width,
         gridTemplateColumns: `${anchor.labelWidth}px minmax(0, 1fr)`,
@@ -569,33 +628,43 @@ export function ContentApp({
       } as CSSProperties)
     : undefined;
   const showNativeFields = anchor && (settings.features.industry || settings.features.health);
+  const nativeFields = showNativeFields
+    ? createPortal(
+        <div className={`extension-shell theme-${theme}`} data-theme={theme}>
+          <section
+            className="native-field-stack"
+            style={nativeFieldStyle}
+            aria-label="Customer data"
+          >
+            {settings.features.industry ? (
+              <IndustryField
+                context={industry}
+                open={industryOpen}
+                loading={industryLoading}
+                pending={industryPending}
+                error={industryError}
+                onToggle={() => setIndustryOpen((value) => !value)}
+                onSelect={(industryId) => void selectIndustry(industryId)}
+              />
+            ) : null}
+            {settings.features.health ? (
+              <HealthControl
+                context={health}
+                loading={healthLoading}
+                pending={healthPending}
+                error={healthError}
+                onSelect={(state) => void selectHealth(state)}
+              />
+            ) : null}
+          </section>
+        </div>,
+        panelContainer,
+      )
+    : null;
 
   return (
     <div className={`extension-shell theme-${theme}`} data-theme={theme}>
-      {showNativeFields ? (
-        <section className="native-field-stack" style={nativeFieldStyle} aria-label="Customer data">
-          {settings.features.industry ? (
-            <IndustryField
-              context={industry}
-              open={industryOpen}
-              loading={industryLoading}
-              pending={industryPending}
-              error={industryError}
-              onToggle={() => setIndustryOpen((value) => !value)}
-              onSelect={(industryId) => void selectIndustry(industryId)}
-            />
-          ) : null}
-          {settings.features.health ? (
-            <HealthControl
-              context={health}
-              loading={healthLoading}
-              pending={healthPending}
-              error={healthError}
-              onSelect={(state) => void selectHealth(state)}
-            />
-          ) : null}
-        </section>
-      ) : null}
+      {nativeFields}
       <StatusBar status={status} onDismiss={dismissStatus} />
     </div>
   );

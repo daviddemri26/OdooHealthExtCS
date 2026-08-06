@@ -1,7 +1,7 @@
 import { findContractNumberAnchor, findOrderDateAnchor } from './routes';
 
 export interface OdooFieldAnchor {
-  bottom: number;
+  top: number;
   left: number;
   width: number;
   labelWidth: number;
@@ -15,15 +15,7 @@ export interface OdooFieldAnchor {
   linkColor: string;
 }
 
-function parsePixels(value: string, fallback: number): number {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-export function measureOrderDateAnchor(
-  root: ParentNode = document,
-  viewportHeight = window.innerHeight,
-): OdooFieldAnchor | null {
+export function measureOrderDateAnchor(root: ParentNode = document): OdooFieldAnchor | null {
   const field = findOrderDateAnchor(root);
   const contractNumber = findContractNumberAnchor(root);
   const valueCell = field?.closest<HTMLElement>('.o_cell');
@@ -47,33 +39,32 @@ export function measureOrderDateAnchor(
   const statusBounds = root
     .querySelector<HTMLElement>('.o_form_view [name="subscription_state"]')
     ?.getBoundingClientRect();
-  const fieldTop = Math.min(labelBounds.top, valueBounds.top);
   if (
     labelBounds.width <= 0 ||
     valueBounds.width <= 0 ||
     contractBounds.width <= 0 ||
-    fieldTop < 72 ||
-    fieldTop > viewportHeight
+    !sheetBounds ||
+    sheetBounds.width <= 0 ||
+    sheetBounds.height <= 0
   ) {
     return null;
   }
 
   const fieldStyle = getComputedStyle(field);
   const labelStyle = getComputedStyle(labelCell);
-  const groupStyle = getComputedStyle(group);
   const link = group.querySelector<HTMLElement>('a:not(.o_external_button)');
   const linkColor = link ? getComputedStyle(link).color : '#00a09d';
-  const rowGap = parsePixels(groupStyle.rowGap, 8);
-  const left = contractBounds.right + 48;
+  const leftViewport = contractBounds.right + 48;
+  const left = leftViewport - sheetBounds.left;
   const safeRight = Math.min(
-    sheetBounds?.right ? sheetBounds.right - 16 : valueBounds.right,
+    sheetBounds.right - 16,
     statusBounds?.left ? statusBounds.left - 20 : Number.POSITIVE_INFINITY,
   );
-  const width = Math.min(380, safeRight - left);
+  const width = Math.min(380, safeRight - leftViewport);
   if (width < 260) return null;
 
   return {
-    bottom: Math.max(0, viewportHeight - fieldTop + rowGap),
+    top: 0,
     left,
     width,
     labelWidth: 64,

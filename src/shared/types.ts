@@ -23,6 +23,7 @@ export interface StatusMessage {
   id: string;
   kind: StatusKind;
   message: string;
+  detail?: string;
   action?: StatusAction;
   dismissAfterMs?: number;
 }

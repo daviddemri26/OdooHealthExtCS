@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Moved the compact Health and Industry panel beside the contract number, clear of Odoo's subscription-state badge, with a subtle adaptive frame.
 - Fixed Chrome popup overflow and the unnecessary Firefox footer scroll by applying explicit cross-browser popup dimensions.
 - Made error status messages expire automatically and clarified that Odoo's native Tags widget refreshes after the next page reload.
+- Mounted the compact data panel inside Odoo's form sheet so it scrolls with the record and remains below native sticky controls and dialogs.
+- Added a Firefox-tolerant contract-title anchor, fixed-size Health circles, outline-only selection, and native color-only Industry hover feedback.
+- Added explicit Arrow Up/Down plus Enter Industry selection and pause-on-hover status timers.
+- Reworked status messages with a prominent primary line, optional secondary detail, and a kind-specific colored outline instead of a small indicator dot.
 
 ### Security
 

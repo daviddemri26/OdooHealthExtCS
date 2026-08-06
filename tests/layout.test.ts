@@ -50,9 +50,9 @@ describe('native Odoo field anchor', () => {
     sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
     status.getBoundingClientRect = () => rect(900, 165, 90, 21);
 
-    expect(measureOrderDateAnchor(document, 760)).toMatchObject({
-      bottom: 548,
-      left: 368,
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      top: 0,
+      left: 344,
       width: 380,
       labelWidth: 64,
       columnGap: 8,
@@ -65,18 +65,22 @@ describe('native Odoo field anchor', () => {
     });
   });
 
-  it('does not use a fallback position when Order Date is hidden or offscreen', () => {
+  it('keeps a stable sheet-relative position when the page scrolls', () => {
     const field = document.querySelector<HTMLElement>('[name="date_order"]')!;
     const value = field.closest<HTMLElement>('.o_cell')!;
     const label = value.previousElementSibling as HTMLElement;
     const contract = document.querySelector<HTMLElement>('h1 span')!;
-    contract.getBoundingClientRect = () => rect(40, 165, 280, 40);
-    label.getBoundingClientRect = () => rect(520, 40, 136, 26);
-    value.getBoundingClientRect = () => rect(672, 40, 408, 26);
-    expect(measureOrderDateAnchor(document, 760)).toBeNull();
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
+    contract.getBoundingClientRect = () => rect(40, -235, 280, 40);
+    label.getBoundingClientRect = () => rect(520, -180, 136, 26);
+    value.getBoundingClientRect = () => rect(672, -180, 408, 26);
+    sheet.getBoundingClientRect = () => rect(24, -255, 1080, 800);
+    status.getBoundingClientRect = () => rect(900, -235, 90, 21);
+    expect(measureOrderDateAnchor(document)).toMatchObject({ top: 0, left: 344, width: 380 });
 
     label.getBoundingClientRect = () => rect(520, 220, 0, 0);
-    expect(measureOrderDateAnchor(document, 760)).toBeNull();
+    expect(measureOrderDateAnchor(document)).toBeNull();
   });
 
   it('stays clear of the native subscription-state badge', () => {
@@ -92,9 +96,27 @@ describe('native Odoo field anchor', () => {
     sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
     status.getBoundingClientRect = () => rect(800, 165, 90, 21);
 
-    expect(measureOrderDateAnchor(document, 760)).toMatchObject({
-      left: 518,
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      left: 494,
       width: 262,
     });
+  });
+
+  it('falls back to the form title when Firefox omits the client-order field wrapper', () => {
+    document.querySelector('[name="client_order_ref"]')?.remove();
+    const heading = document.querySelector<HTMLElement>('h1')!;
+    heading.textContent = 'SO2026/123';
+    const field = document.querySelector<HTMLElement>('[name="date_order"]')!;
+    const value = field.closest<HTMLElement>('.o_cell')!;
+    const label = value.previousElementSibling as HTMLElement;
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
+    label.getBoundingClientRect = () => rect(520, 220, 136, 26);
+    value.getBoundingClientRect = () => rect(672, 220, 408, 26);
+    heading.getBoundingClientRect = () => rect(40, 165, 280, 40);
+    sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
+    status.getBoundingClientRect = () => rect(900, 165, 90, 21);
+
+    expect(measureOrderDateAnchor(document)).toMatchObject({ top: 0, left: 344, width: 380 });
   });
 });
