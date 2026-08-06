@@ -19,9 +19,9 @@ body,
   width: 380px;
   min-width: 380px;
   max-width: 380px;
-  height: 590px;
-  min-height: 590px;
-  max-height: 590px;
+  height: 600px;
+  min-height: 600px;
+  max-height: 600px;
 }
 
 html,
@@ -45,9 +45,9 @@ input {
   --accent-soft: #eee6ec;
   --switch-active: #34c759;
   width: 380px;
-  height: 590px;
+  height: 600px;
   overflow: hidden;
-  padding: 20px;
+  padding: 16px;
   color: var(--text);
   background: var(--background);
 }
@@ -68,7 +68,7 @@ input {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .popup-header img {
@@ -103,7 +103,7 @@ input {
 }
 
 section {
-  margin-top: 17px;
+  margin-top: 12px;
 }
 
 section h2 {
@@ -131,15 +131,15 @@ section h2 {
 .setting-row {
   position: relative;
   display: flex;
-  min-height: 64px;
+  min-height: 58px;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 11px 13px;
+  padding: 9px 13px 7px;
   cursor: pointer;
 }
 
-.setting-row + .setting-row {
+.feature-setting + .feature-setting {
   border-top: 1px solid var(--border);
 }
 
@@ -208,6 +208,56 @@ section h2 {
   opacity: 0.5;
 }
 
+.toast-setting {
+  position: relative;
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 13px 9px;
+  color: var(--muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.toast-setting input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.switch-compact {
+  width: 30px;
+  height: 18px;
+}
+
+.switch-compact::after {
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+}
+
+.toast-setting input:checked + .switch {
+  background: var(--switch-active);
+}
+
+.toast-setting input:checked + .switch::after {
+  transform: translateX(12px);
+}
+
+.toast-setting input:focus-visible + .switch {
+  outline: 3px solid color-mix(in srgb, var(--switch-active) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.toast-setting.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .appearance-control {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -232,7 +282,7 @@ section h2 {
 }
 
 .diagnostics {
-  padding: 11px 13px;
+  padding: 9px 13px;
 }
 
 .diagnostics h2 {
@@ -262,8 +312,8 @@ section h2 {
 }
 
 .privacy-note {
-  margin-top: 17px;
-  padding: 12px 13px;
+  margin-top: 12px;
+  padding: 9px 13px;
 }
 
 .privacy-note strong {
@@ -282,7 +332,7 @@ footer {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 10px;
   color: var(--muted);
   font-size: 9px;
 }

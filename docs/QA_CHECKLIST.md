@@ -56,6 +56,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] The framed Industry and Health panel is attached to the form-sheet top edge and horizontally tied to the contract number with chatter open/closed, at every tested width and zoom.
 - [ ] The frame shrinks when a shorter industry is selected and expands only up to the safe native-layout limit for longer content.
 - [ ] Long industry names truncate before the native subscription-state badge, while every dropdown option remains fully readable.
+- [ ] The expanded Industry picker aligns with the left edge of the compact panel in Chrome and Firefox.
 - [ ] Health and Industry selections update immediately and roll back visibly after a simulated failed write.
 - [ ] Firefox positions the panel beside the visible contract number rather than beside the status badge.
 - [ ] The panel scrolls with the Odoo form and stays below sticky action bars, user-preference dialogs, email composers, and other native modals.
@@ -63,6 +64,8 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Chrome shows no unused popup area and neither browser requires scrolling to read the popup footer.
 - [ ] Success and error status messages use a colored outline, a prominent primary line, and dismiss automatically; Health confirmation explains the delayed native Tags-widget refresh.
 - [ ] Hovering a status message pauses its dismissal timer; leaving resumes from the remaining time.
+- [ ] Each feature's success toast is enabled by default, can be disabled in Settings, and can disable itself through “Don't show again” without suppressing errors or warnings.
+- [ ] The inline panel remains absent during initial reads and fades in only after all enabled feature reads settle.
 - [ ] The panel appears on equivalent Chrome and Firefox subscription forms, including forms where Odoo renders only the `h1` contract title.
 - [ ] Success, error, warning, and info messages all disappear automatically at their documented durations.
 - [ ] Enabled settings switches are green in Auto, Light, and Dark appearance modes.

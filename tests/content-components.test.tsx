@@ -108,6 +108,7 @@ describe('content controls', () => {
 
   it('runs an undo action and allows dismissal', async () => {
     const undo = vi.fn().mockResolvedValue(undefined);
+    const suppress = vi.fn().mockResolvedValue(undefined);
     const dismiss = vi.fn();
     render(
       <StatusBar
@@ -117,6 +118,7 @@ describe('content controls', () => {
           message: 'Saved.',
           detail: 'The displayed value is current.',
           action: { label: 'Undo', run: undo },
+          suppressAction: { label: "Don't show again", run: suppress },
         }}
         onDismiss={dismiss}
       />,
@@ -125,6 +127,8 @@ describe('content controls', () => {
     expect(screen.getByText('The displayed value is current.')).toHaveClass('status-detail');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(undo).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: "Don't show again" }));
+    expect(suppress).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss message' }));
     expect(dismiss).toHaveBeenCalledOnce();
   });

@@ -18,7 +18,7 @@ The visual controls locate the visible native `[name="date_order"]` widget and c
 
 The panel uses a low local stack level and no top border, visually joining the form sheet boundary while remaining below Odoo sticky controls and dialogs. The Industry dropdown is layered only inside this local panel. The fixed status host uses a normal application-level stack instead of a maximum integer stack.
 
-The compact frame fits its current content, while the Industry picker can expand independently so complete option labels remain visible. Firefox sometimes reports the contract heading as a full-width block; positioning therefore measures the rendered title text, with a typography-based fallback, instead of trusting the block width.
+The compact frame fits its current content, while the Industry picker expands independently from the frame's left edge so complete option labels remain visible. The panel is not mounted with loading placeholders: it appears with a short fade only after every enabled feature has settled for the active record. Firefox sometimes reports the contract heading as a full-width block; positioning therefore measures the rendered title text, with a typography-based fallback, instead of trusting the block width.
 
 `FeatureModule` defines the reusable eligibility and lifecycle contract for future modules. The initial React implementation shares one mount while the health and industry services remain independently enabled and isolated.
 
@@ -49,11 +49,11 @@ The industry service validates `res.partner.industry_id`, reads `sale.order.part
 
 ## Settings and compatibility
 
-`ExtensionSettings` has schema version 1 and stores only the master switch, two feature switches, and appearance preference in browser synchronized storage. A sanitized compatibility code and timestamp are stored locally. Migrations normalize absent or unknown settings to safe defaults.
+`ExtensionSettings` has schema version 2 and stores only the master switch, two feature switches, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled. Version 1 settings migrate automatically without changing existing feature or appearance choices. A sanitized compatibility code and timestamp are stored locally. Migrations normalize absent or unknown settings to safe defaults.
 
 ## Status and Undo
 
-`StatusMessage` supports success, error, warning, info, an optional secondary detail, and an optional asynchronous action. Each message uses a kind-specific outline and a prominent primary line. Every kind closes automatically: success after seven seconds, errors and warnings after eight seconds, and informational messages after six seconds. The countdown pauses while the pointer remains over the message and resumes with the remaining time. Health confirmations explain on separate detail lines that the extension indicator is current immediately while Odoo's native Tags widget refreshes on the next page reload. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
+`StatusMessage` supports success, error, warning, info, an optional secondary detail, an optional asynchronous action, and an optional suppression action. Each message uses a kind-specific outline and a prominent primary line. Every kind closes automatically: success after seven seconds, errors and warnings after eight seconds, and informational messages after six seconds. The countdown pauses while the pointer remains over the message and resumes with the remaining time. Health and Industry success confirmations place Undo and dismissal on the upper right and “Don't show again” beneath them; that action disables only the matching feature's future success confirmations. Errors, warnings, and informational messages remain enabled. Health confirmations explain on separate detail lines that the extension indicator is current immediately while Odoo's native Tags widget refreshes on the next page reload. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
 
 Health and Industry selections update the local interface before the allow-listed RPC completes. A failed write restores the exact previous snapshot and reports the sanitized error.
 

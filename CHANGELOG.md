@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Expanded the Industry picker independently from the compact field frame so every option remains readable.
 - Added optimistic Health and Industry updates with automatic rollback when Odoo rejects a write.
 - Corrected Firefox positioning by measuring the visible contract text instead of its full-width heading container.
+- Left-aligned the expanded Industry picker with the compact field panel while preserving its independent width.
+- Hid the inline panel until enabled data finishes loading, then added a short fade-in instead of visible loading placeholders.
 
 ### Security
 
@@ -34,6 +36,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Subscription account-health controls with canonical tag validation, duplicate cleanup, clearing, and safe Undo.
 - Subscription customer industry field with a compact searchable dropdown, keyboard navigation, clearing, and safe Undo.
 - Versioned settings popup, compatibility status, Shadow DOM isolation, and shared status messages.
+- Per-feature success-toast preferences, enabled by default, with a direct “Don't show again” action in Health and Industry confirmations.
 - Deterministic packaging, privacy scanning, GitHub Actions releases, optional store submission, and GitHub Pages policies.
 - Complete English repository, support, privacy, release, QA, compatibility, troubleshooting, and store documentation.
 

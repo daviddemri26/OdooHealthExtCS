@@ -18,6 +18,7 @@ import {
 import { OdooGatewayError } from '../odoo/gateway';
 import type { OdooFieldAnchor } from '../odoo/layout';
 import { setCompatibilityStatus } from '../shared/compatibility';
+import { saveSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
   HealthState,
@@ -45,7 +46,7 @@ const STATUS_DURATIONS: Record<StatusMessage['kind'], number> = {
 function createMessage(
   kind: StatusMessage['kind'],
   message: string,
-  options: Pick<StatusMessage, 'action' | 'detail' | 'dismissAfterMs'> = {},
+  options: Pick<StatusMessage, 'action' | 'detail' | 'dismissAfterMs' | 'suppressAction'> = {},
 ): StatusMessage {
   return {
     id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
@@ -99,6 +100,7 @@ export function StatusBar({
   }, [clearTimer, startTimer, status]);
 
   const [acting, setActing] = useState(false);
+  const [suppressing, setSuppressing] = useState(false);
 
   if (!status) return null;
 
@@ -124,6 +126,16 @@ export function StatusBar({
     }
   };
 
+  const runSuppressAction = async (): Promise<void> => {
+    if (!status.suppressAction || suppressing) return;
+    setSuppressing(true);
+    try {
+      await status.suppressAction.run();
+    } finally {
+      setSuppressing(false);
+    }
+  };
+
   return (
     <div
       className={`status-bar status-${status.kind}`}
@@ -136,19 +148,33 @@ export function StatusBar({
         <strong className="status-title">{status.message}</strong>
         {status.detail ? <span className="status-detail">{status.detail}</span> : null}
       </span>
-      {status.action ? (
-        <button className="status-action" type="button" disabled={acting} onClick={runAction}>
-          {acting ? 'Working…' : status.action.label}
-        </button>
-      ) : null}
-      <button
-        className="status-dismiss"
-        type="button"
-        aria-label="Dismiss message"
-        onClick={onDismiss}
-      >
-        ×
-      </button>
+      <span className="status-controls">
+        <span className="status-top-actions">
+          {status.action ? (
+            <button className="status-action" type="button" disabled={acting} onClick={runAction}>
+              {acting ? 'Working…' : status.action.label}
+            </button>
+          ) : null}
+          <button
+            className="status-dismiss"
+            type="button"
+            aria-label="Dismiss message"
+            onClick={onDismiss}
+          >
+            ×
+          </button>
+        </span>
+        {status.suppressAction ? (
+          <button
+            className="status-suppress"
+            type="button"
+            disabled={suppressing}
+            onClick={runSuppressAction}
+          >
+            {suppressing ? 'Saving…' : status.suppressAction.label}
+          </button>
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -420,18 +446,36 @@ export function ContentApp({
   const [industryPending, setIndustryPending] = useState(false);
   const [industryOpen, setIndustryOpen] = useState(false);
   const [status, setStatus] = useState<StatusMessage | null>(null);
+  const [readyRecordId, setReadyRecordId] = useState<number | null>(null);
   const recordId = route?.recordId;
 
   const notify = useCallback((message: StatusMessage) => setStatus(message), []);
   const dismissStatus = useCallback(() => setStatus(null), []);
+  const disableSuccessToast = useCallback(
+    async (feature: keyof ExtensionSettings['successToasts']): Promise<void> => {
+      try {
+        await saveSettings({
+          ...settings,
+          successToasts: { ...settings.successToasts, [feature]: false },
+        });
+        dismissStatus();
+      } catch {
+        notify(createMessage('error', 'The confirmation preference could not be saved.'));
+      }
+    },
+    [dismissStatus, notify, settings],
+  );
 
   useEffect(() => {
+    setReadyRecordId(null);
     setHealth(null);
     setIndustry(null);
     setHealthError(null);
     setIndustryError(null);
     setIndustryOpen(false);
     setStatus(null);
+    setHealthLoading(false);
+    setIndustryLoading(false);
     if (!recordId || !settings.enabled) return;
 
     let active = true;
@@ -490,6 +534,7 @@ export function ContentApp({
           compatibilityFailure === null,
           compatibilityFailure ?? 'ready',
         );
+        if (active) setReadyRecordId(recordId);
       }
     };
 
@@ -524,43 +569,49 @@ export function ContentApp({
       const message = next
         ? `Account health set to ${next[0]?.toUpperCase()}${next.slice(1)}.`
         : 'Account health cleared.';
-      notify(
-        createMessage('success', message, {
-          detail:
-            'The health indicator above is current.\nOdoo’s Tags field will update after the next page reload.',
-          dismissAfterMs: 7_000,
-          action: {
-            label: 'Undo',
-            run: async () => {
-              try {
-                const restored = await undoHealthChange(gateway, route.recordId, change);
-                if (!restored) {
+      if (settings.successToasts.health) {
+        notify(
+          createMessage('success', message, {
+            detail:
+              'The health indicator above is current.\nOdoo’s Tags field will update after the next page reload.',
+            dismissAfterMs: 7_000,
+            action: {
+              label: 'Undo',
+              run: async () => {
+                try {
+                  const restored = await undoHealthChange(gateway, route.recordId, change);
+                  if (!restored) {
+                    notify(
+                      createMessage(
+                        'warning',
+                        'Undo was not applied because the record changed elsewhere.',
+                      ),
+                    );
+                    return;
+                  }
+                  setHealth({
+                    ...previousHealth,
+                    snapshot: getHealthSnapshot(change.before, previousHealth.tags),
+                  });
                   notify(
-                    createMessage(
-                      'warning',
-                      'Undo was not applied because the record changed elsewhere.',
-                    ),
+                    createMessage('info', 'Previous account health restored.', {
+                      dismissAfterMs: 4_000,
+                    }),
                   );
-                  return;
+                } catch (error) {
+                  const failure = publicError(error);
+                  notify(createMessage('error', failure.message));
+                  await setCompatibilityStatus(false, failure.code);
                 }
-                setHealth({
-                  ...previousHealth,
-                  snapshot: getHealthSnapshot(change.before, previousHealth.tags),
-                });
-                notify(
-                  createMessage('info', 'Previous account health restored.', {
-                    dismissAfterMs: 4_000,
-                  }),
-                );
-              } catch (error) {
-                const failure = publicError(error);
-                notify(createMessage('error', failure.message));
-                await setCompatibilityStatus(false, failure.code);
-              }
+              },
             },
-          },
-        }),
-      );
+            suppressAction: {
+              label: "Don't show again",
+              run: () => disableSuccessToast('health'),
+            },
+          }),
+        );
+      }
     } catch (error) {
       setHealth(previousHealth);
       const failure = publicError(error);
@@ -584,38 +635,44 @@ export function ContentApp({
       const change = await applyIndustryChange(gateway, industry, industryId);
       const selectedName =
         industry.industries.find((candidate) => candidate.id === industryId)?.name ?? 'No industry';
-      notify(
-        createMessage('success', `Industry set to ${selectedName}.`, {
-          dismissAfterMs: 7_000,
-          action: {
-            label: 'Undo',
-            run: async () => {
-              try {
-                const restored = await undoIndustryChange(gateway, change);
-                if (!restored) {
+      if (settings.successToasts.industry) {
+        notify(
+          createMessage('success', `Industry set to ${selectedName}.`, {
+            dismissAfterMs: 7_000,
+            action: {
+              label: 'Undo',
+              run: async () => {
+                try {
+                  const restored = await undoIndustryChange(gateway, change);
+                  if (!restored) {
+                    notify(
+                      createMessage(
+                        'warning',
+                        'Undo was not applied because the customer changed elsewhere.',
+                      ),
+                    );
+                    return;
+                  }
+                  setIndustry({ ...previousIndustry, currentIndustryId: change.before });
                   notify(
-                    createMessage(
-                      'warning',
-                      'Undo was not applied because the customer changed elsewhere.',
-                    ),
+                    createMessage('info', 'Previous industry restored.', {
+                      dismissAfterMs: 4_000,
+                    }),
                   );
-                  return;
+                } catch (error) {
+                  const failure = publicError(error);
+                  notify(createMessage('error', failure.message));
+                  await setCompatibilityStatus(false, failure.code);
                 }
-                setIndustry({ ...previousIndustry, currentIndustryId: change.before });
-                notify(
-                  createMessage('info', 'Previous industry restored.', {
-                    dismissAfterMs: 4_000,
-                  }),
-                );
-              } catch (error) {
-                const failure = publicError(error);
-                notify(createMessage('error', failure.message));
-                await setCompatibilityStatus(false, failure.code);
-              }
+              },
             },
-          },
-        }),
-      );
+            suppressAction: {
+              label: "Don't show again",
+              run: () => disableSuccessToast('industry'),
+            },
+          }),
+        );
+      }
     } catch (error) {
       setIndustry(previousIndustry);
       const failure = publicError(error);
@@ -643,14 +700,19 @@ export function ContentApp({
         '--odoo-label-color': anchor.labelColor,
         '--odoo-value-color': anchor.valueColor,
         '--odoo-link-color': anchor.linkColor,
+        '--odoo-label-width': `${anchor.labelWidth}px`,
+        '--odoo-column-gap': `${anchor.columnGap}px`,
       } as CSSProperties)
     : undefined;
-  const showNativeFields = anchor && (settings.features.industry || settings.features.health);
+  const showNativeFields =
+    anchor &&
+    readyRecordId === recordId &&
+    (settings.features.industry || settings.features.health);
   const nativeFields = showNativeFields
     ? createPortal(
         <div className={`extension-shell theme-${theme}`} data-theme={theme}>
           <section
-            className="native-field-stack"
+            className="native-field-stack native-field-stack-ready"
             style={nativeFieldStyle}
             aria-label="Customer data"
           >

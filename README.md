@@ -9,7 +9,7 @@ The extension runs only on `https://www.odoo.com/odoo*`, uses the user's existin
 - Account health: read, set, replace, or clear the canonical `Health - High`, `Health - Medium`, and `Health - Low` tags while preserving unrelated tags.
 - Industry quick picker: search and update the exact subscription customer's industry without leaving the subscription.
 - Safe feedback: light/dark status messages and a seven-second Undo action that refuses to overwrite a later external change.
-- Personal settings: master, feature, and appearance controls stored by the browser.
+- Personal settings: master, feature, per-feature success-toast, and appearance controls stored by the browser.
 
 ## Screenshots
 

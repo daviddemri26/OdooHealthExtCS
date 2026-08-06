@@ -40,6 +40,33 @@ function Switch({
   );
 }
 
+function ToastSwitch({
+  checked,
+  disabled = false,
+  feature,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  feature: 'Account health' | 'Industry';
+  onChange: (checked: boolean) => void;
+}): React.JSX.Element {
+  const label = `${feature} success toast`;
+  return (
+    <label className={`toast-setting${disabled ? ' is-disabled' : ''}`}>
+      <span>Show success toast</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="switch switch-compact" aria-hidden="true" />
+    </label>
+  );
+}
+
 export function Popup(): React.JSX.Element {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [compatibility, setCompatibility] = useState<CompatibilityStatus | null>(null);
@@ -77,6 +104,16 @@ export function Popup(): React.JSX.Element {
     }));
   };
 
+  const updateSuccessToast = (
+    feature: keyof ExtensionSettings['successToasts'],
+    checked: boolean,
+  ): void => {
+    setSettings((current) => ({
+      ...current,
+      successToasts: { ...current.successToasts, [feature]: checked },
+    }));
+  };
+
   const version = browser.runtime.getManifest().version;
   const compatibilityLabel = compatibility
     ? compatibility.ok
@@ -107,20 +144,36 @@ export function Popup(): React.JSX.Element {
       <section>
         <h2>Features</h2>
         <div className="settings-card">
-          <Switch
-            checked={settings.features.health}
-            disabled={!settings.enabled}
-            label="Account health"
-            description="Set or clear High, Medium, and Low health tags."
-            onChange={(checked) => updateFeature('health', checked)}
-          />
-          <Switch
-            checked={settings.features.industry}
-            disabled={!settings.enabled}
-            label="Industry quick picker"
-            description="Update the linked customer without leaving the subscription."
-            onChange={(checked) => updateFeature('industry', checked)}
-          />
+          <div className="feature-setting">
+            <Switch
+              checked={settings.features.health}
+              disabled={!settings.enabled}
+              label="Account health"
+              description="Set or clear High, Medium, and Low health tags."
+              onChange={(checked) => updateFeature('health', checked)}
+            />
+            <ToastSwitch
+              checked={settings.successToasts.health}
+              disabled={!settings.enabled || !settings.features.health}
+              feature="Account health"
+              onChange={(checked) => updateSuccessToast('health', checked)}
+            />
+          </div>
+          <div className="feature-setting">
+            <Switch
+              checked={settings.features.industry}
+              disabled={!settings.enabled}
+              label="Industry quick picker"
+              description="Update the linked customer without leaving the subscription."
+              onChange={(checked) => updateFeature('industry', checked)}
+            />
+            <ToastSwitch
+              checked={settings.successToasts.industry}
+              disabled={!settings.enabled || !settings.features.industry}
+              feature="Industry"
+              onChange={(checked) => updateSuccessToast('industry', checked)}
+            />
+          </div>
         </div>
       </section>
 

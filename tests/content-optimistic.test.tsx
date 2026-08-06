@@ -1,9 +1,15 @@
 import { fireEvent, render, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { saveSettings } = vi.hoisted(() => ({
+  saveSettings: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('../src/shared/compatibility', () => ({
   setCompatibilityStatus: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('../src/shared/settings', () => ({ saveSettings }));
 
 import { ContentApp } from '../src/content/ContentApp';
 import type { OdooFieldAnchor } from '../src/odoo/layout';
@@ -11,9 +17,10 @@ import type { ExtensionSettings } from '../src/shared/types';
 import { MockGateway } from './helpers/mock-gateway';
 
 const settings: ExtensionSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   enabled: true,
   features: { health: true, industry: true },
+  successToasts: { health: true, industry: true },
   appearance: 'dark',
 };
 
@@ -70,7 +77,10 @@ function configuredGateway(): MockGateway {
   return gateway;
 }
 
-function renderContent(gateway: MockGateway): {
+function renderContent(
+  gateway: MockGateway,
+  appSettings: ExtensionSettings = settings,
+): {
   panel: HTMLDivElement;
   unmount: () => void;
 } {
@@ -80,7 +90,7 @@ function renderContent(gateway: MockGateway): {
     <ContentApp
       gateway={gateway}
       route={{ model: 'sale.order', recordId: 42, pathname: '/odoo/sale.order/42' }}
-      settings={settings}
+      settings={appSettings}
       detectedTheme="dark"
       anchor={anchor}
       panelContainer={panel}
@@ -96,14 +106,20 @@ function renderContent(gateway: MockGateway): {
 }
 
 describe('optimistic Odoo controls', () => {
+  beforeEach(() => saveSettings.mockClear());
+
   it('updates Health immediately and restores it when Odoo rejects the write', async () => {
     const gateway = configuredGateway();
     const write = deferred<boolean>();
     gateway.write = vi.fn(() => write.promise);
     const view = renderContent(gateway);
     try {
+      expect(view.panel.querySelector('.native-field-stack')).not.toBeInTheDocument();
       await waitFor(() =>
         expect(view.panel.querySelector('.health-current')).toHaveTextContent('High'),
+      );
+      expect(view.panel.querySelector('.native-field-stack')).toHaveClass(
+        'native-field-stack-ready',
       );
       fireEvent.click(within(view.panel).getByRole('button', { name: 'Set health to Low' }));
       expect(view.panel.querySelector('.health-current')).toHaveTextContent('Low');
@@ -111,6 +127,53 @@ describe('optimistic Odoo controls', () => {
       write.resolve(false);
       await waitFor(() =>
         expect(view.panel.querySelector('.health-current')).toHaveTextContent('High'),
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('does not show a Health success toast when that preference is disabled', async () => {
+    const gateway = configuredGateway();
+    gateway.write = vi.fn().mockResolvedValue(true);
+    const view = renderContent(gateway, {
+      ...settings,
+      features: { health: true, industry: false },
+      successToasts: { health: false, industry: true },
+    });
+    try {
+      await waitFor(() =>
+        expect(view.panel.querySelector('.health-current')).toHaveTextContent('High'),
+      );
+      fireEvent.click(within(view.panel).getByRole('button', { name: 'Set health to Low' }));
+      await waitFor(() => expect(gateway.write).toHaveBeenCalledOnce());
+      expect(document.querySelector('[role="status"]')).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('disables only the Health success toast from its confirmation action', async () => {
+    const gateway = configuredGateway();
+    gateway.write = vi.fn().mockResolvedValue(true);
+    const view = renderContent(gateway, {
+      ...settings,
+      successToasts: { health: true, industry: false },
+    });
+    try {
+      await waitFor(() =>
+        expect(view.panel.querySelector('.health-current')).toHaveTextContent('High'),
+      );
+      fireEvent.click(within(view.panel).getByRole('button', { name: 'Set health to Low' }));
+      const suppress = await within(document.body).findByRole('button', {
+        name: "Don't show again",
+      });
+      fireEvent.click(suppress);
+      await waitFor(() =>
+        expect(saveSettings).toHaveBeenCalledWith({
+          ...settings,
+          successToasts: { health: false, industry: false },
+        }),
       );
     } finally {
       view.unmount();

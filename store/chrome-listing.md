@@ -16,7 +16,7 @@ Set Account health to High, Medium, or Low from a compact Odoo-style field place
 
 Click the Industry value directly above Health to open a compact searchable dropdown and update the exact linked customer without navigating away. Clear the field with No industry when appropriate.
 
-Smooth light and dark interfaces explain the current value and show success, warning, or error feedback. Successful writes include a seven-second Undo action that first confirms the record has not changed elsewhere.
+Smooth light and dark interfaces explain the current value and show success, warning, or error feedback. Successful writes include a seven-second Undo action that first confirms the record has not changed elsewhere. Users may hide Health and Industry success confirmations independently from Settings or directly from the confirmation itself.
 
 The popup lets each user enable or disable the extension, each feature, and Auto/Light/Dark appearance.
 

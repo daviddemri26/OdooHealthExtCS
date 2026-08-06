@@ -3,9 +3,13 @@ export type HealthState = 'high' | 'medium' | 'low' | null;
 export type AppearancePreference = 'auto' | 'light' | 'dark';
 
 export interface ExtensionSettings {
-  schemaVersion: 1;
+  schemaVersion: 2;
   enabled: boolean;
   features: {
+    health: boolean;
+    industry: boolean;
+  };
+  successToasts: {
     health: boolean;
     industry: boolean;
   };
@@ -25,6 +29,7 @@ export interface StatusMessage {
   message: string;
   detail?: string;
   action?: StatusAction;
+  suppressAction?: StatusAction;
   dismissAfterMs?: number;
 }
 

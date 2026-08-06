@@ -12,7 +12,7 @@ Faster account health and customer industry updates for authorized Odoo Customer
 
 OdooHealthExtCS is an internal productivity extension that adds focused account-health and customer-industry controls to Odoo subscription records.
 
-The compact Odoo-style fields appear directly above Order Date. Account health sets High, Medium, or Low, clears the active value, preserves unrelated tags, and safely cleans duplicate health tags on the next selection. The inline Industry dropdown searches Odoo's live choices and updates the exact customer linked to the subscription without navigating away.
+The compact Odoo-style fields appear directly above Order Date. Account health sets High, Medium, or Low, clears the active value, preserves unrelated tags, and safely cleans duplicate health tags on the next selection. The inline Industry dropdown searches Odoo's live choices and updates the exact customer linked to the subscription without navigating away. Health and Industry success confirmations can be hidden independently while errors and warnings remain visible.
 
 The interface supports keyboard navigation, light and dark appearance, sanitized status messages, and a seven-second Undo that refuses to overwrite a later change. Users can disable the entire extension or either feature from the popup.
 
