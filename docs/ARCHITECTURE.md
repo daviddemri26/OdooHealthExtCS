@@ -14,7 +14,7 @@ A separate script runs at `document_start` with `world: "MAIN"`. It shares the O
 
 Odoo is a single-page application. The entrypoint watches DOM changes, URL changes, history events, viewport changes, and theme changes, then schedules an idempotent render. Feature state resets when the active sale order changes. The UI mounts only when a rendered Odoo form includes `partner_id` and either a subscription route or `subscription_state`.
 
-The visual controls locate the native `[name="date_order"]` widget on each render. They measure its label and value cells, grid gaps, font, colors, and viewport position, then place a transparent Shadow DOM grid immediately above that row. Industry appears first, Health second, and Order Date remains directly below. This makes the controls follow Odoo's real form column when chatter, zoom, responsive width, or SPA rerenders change the layout. If the Order Date anchor is absent or offscreen, the controls do not fall back to an unrelated pixel position.
+The visual controls locate the native `[name="date_order"]` widget and visible `[name="client_order_ref"]` contract number on each render. Order Date provides the vertical position and Odoo typography; the contract number provides the horizontal position. The compact framed panel begins 48 pixels after the rendered contract number and caps its right edge before the native `subscription_state` badge. Industry appears first and Health second. This keeps long industry names away from the status badge while still following chatter, zoom, responsive width, scrolling, and SPA rerenders. If the required anchors are absent, offscreen, or leave less than 260 pixels of safe width, the controls do not fall back to an unrelated position.
 
 `FeatureModule` defines the reusable eligibility and lifecycle contract for future modules. The initial React implementation shares one mount while the health and industry services remain independently enabled and isolated.
 
@@ -49,7 +49,7 @@ The industry service validates `res.partner.industry_id`, reads `sale.order.part
 
 ## Status and Undo
 
-`StatusMessage` supports success, error, warning, info, and an optional asynchronous action. Successful writes show Undo for seven seconds. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
+`StatusMessage` supports success, error, warning, info, and an optional asynchronous action. Successful writes show Undo for seven seconds; errors remain dismissible and also close automatically after eight seconds. Health confirmations explain that the extension indicator is current immediately while Odoo's native Tags widget refreshes on the next page reload. Before Undo writes a previous value, the service re-reads the record and compares it with the value originally applied. If anything changed externally, Undo stops and warns the user.
 
 ## Adding a feature
 

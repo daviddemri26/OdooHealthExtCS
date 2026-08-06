@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Replaced isolated-world Odoo requests with a versioned, allow-listed `MAIN`-world bridge so Chrome and Firefox use the active authenticated page session reliably.
 - Added distinct bridge, timeout, session, permission, endpoint, network, response, and server diagnostics without forwarding raw Odoo errors.
 - Replaced the floating Health card and right-edge Industry drawer with compact Odoo-style rows anchored directly above the native Order Date field.
+- Moved the compact Health and Industry panel beside the contract number, clear of Odoo's subscription-state badge, with a subtle adaptive frame.
+- Fixed Chrome popup overflow and the unnecessary Firefox footer scroll by applying explicit cross-browser popup dimensions.
+- Made error status messages expire automatically and clarified that Odoo's native Tags widget refreshes after the next page reload.
 
 ### Security
 

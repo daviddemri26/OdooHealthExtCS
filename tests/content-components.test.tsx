@@ -18,7 +18,10 @@ describe('content controls', () => {
         onSelect={onSelect}
       />,
     );
-    expect(screen.getByText('High')).toBeInTheDocument();
+    expect(document.querySelector('.health-current')).toHaveTextContent('High');
+    expect(
+      screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Set health to Low', 'Set health to Medium', 'Clear high health']);
     fireEvent.click(screen.getByRole('button', { name: 'Clear high health' }));
     expect(onSelect).toHaveBeenCalledWith('high');
   });
@@ -89,6 +92,23 @@ describe('content controls', () => {
       act(() => vi.advanceTimersByTime(6_999));
       expect(dismiss).not.toHaveBeenCalled();
       act(() => vi.advanceTimersByTime(1));
+      expect(dismiss).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('automatically dismisses an error message', () => {
+    vi.useFakeTimers();
+    try {
+      const dismiss = vi.fn();
+      render(
+        <StatusBar
+          status={{ id: 'status-3', kind: 'error', message: 'Write failed.' }}
+          onDismiss={dismiss}
+        />,
+      );
+      act(() => vi.advanceTimersByTime(8_000));
       expect(dismiss).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();

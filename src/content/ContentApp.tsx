@@ -42,6 +42,7 @@ function createMessage(
     kind,
     message,
     ...options,
+    dismissAfterMs: options.dismissAfterMs ?? (kind === 'error' ? 8_000 : undefined),
   };
 }
 
@@ -58,8 +59,9 @@ export function StatusBar({
   onDismiss: () => void;
 }): React.JSX.Element | null {
   useEffect(() => {
-    if (!status?.dismissAfterMs) return;
-    const timer = window.setTimeout(onDismiss, status.dismissAfterMs);
+    const dismissAfterMs = status?.dismissAfterMs ?? (status?.kind === 'error' ? 8_000 : undefined);
+    if (!dismissAfterMs) return;
+    const timer = window.setTimeout(onDismiss, dismissAfterMs);
     return () => window.clearTimeout(timer);
   }, [onDismiss, status]);
 
@@ -99,9 +101,9 @@ export function StatusBar({
 }
 
 const HEALTH_OPTIONS: { state: Exclude<HealthState, null>; label: string }[] = [
-  { state: 'high', label: 'High' },
-  { state: 'medium', label: 'Medium' },
   { state: 'low', label: 'Low' },
+  { state: 'medium', label: 'Medium' },
+  { state: 'high', label: 'High' },
 ];
 
 export function HealthControl({
@@ -127,9 +129,6 @@ export function HealthControl({
     <>
       <div className="native-field-label">Health</div>
       <div className="native-field-value health-field" aria-label="Account health">
-        <span className="health-current">
-          {loading ? 'Loading…' : error ? 'Unavailable' : currentLabel}
-        </span>
         <div className="health-options" aria-busy={loading || pending}>
           {HEALTH_OPTIONS.map(({ state, label }) => {
             const active = !context?.snapshot.duplicate && context?.snapshot.state === state;
@@ -147,11 +146,14 @@ export function HealthControl({
                 disabled={loading || pending || Boolean(error)}
                 onClick={() => onSelect(state)}
               >
-                <span aria-hidden="true">{label[0]}</span>
+                <span className="sr-only">{label}</span>
               </button>
             );
           })}
         </div>
+        <span className="health-current">
+          {loading ? 'Loading…' : error ? 'Unavailable' : currentLabel}
+        </span>
       </div>
     </>
   );
@@ -450,36 +452,40 @@ export function ContentApp({
         ? `Account health set to ${next[0]?.toUpperCase()}${next.slice(1)}.`
         : 'Account health cleared.';
       notify(
-        createMessage('success', message, {
-          dismissAfterMs: 7_000,
-          action: {
-            label: 'Undo',
-            run: async () => {
-              try {
-                const restored = await undoHealthChange(gateway, route.recordId, change);
-                if (!restored) {
+        createMessage(
+          'success',
+          `${message} The health indicator above shows the current value. Odoo’s Tags field will update after the next page reload.`,
+          {
+            dismissAfterMs: 7_000,
+            action: {
+              label: 'Undo',
+              run: async () => {
+                try {
+                  const restored = await undoHealthChange(gateway, route.recordId, change);
+                  if (!restored) {
+                    notify(
+                      createMessage(
+                        'warning',
+                        'Undo was not applied because the record changed elsewhere.',
+                      ),
+                    );
+                    return;
+                  }
+                  setHealth({ ...health, snapshot: getHealthSnapshot(change.before, health.tags) });
                   notify(
-                    createMessage(
-                      'warning',
-                      'Undo was not applied because the record changed elsewhere.',
-                    ),
+                    createMessage('info', 'Previous account health restored.', {
+                      dismissAfterMs: 4_000,
+                    }),
                   );
-                  return;
+                } catch (error) {
+                  const failure = publicError(error);
+                  notify(createMessage('error', failure.message));
+                  await setCompatibilityStatus(false, failure.code);
                 }
-                setHealth({ ...health, snapshot: getHealthSnapshot(change.before, health.tags) });
-                notify(
-                  createMessage('info', 'Previous account health restored.', {
-                    dismissAfterMs: 4_000,
-                  }),
-                );
-              } catch (error) {
-                const failure = publicError(error);
-                notify(createMessage('error', failure.message));
-                await setCompatibilityStatus(false, failure.code);
-              }
+              },
             },
           },
-        }),
+        ),
       );
     } catch (error) {
       const failure = publicError(error);

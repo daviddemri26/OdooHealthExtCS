@@ -54,3 +54,10 @@ export function isRenderedSubscriptionForm(pathname: string, root: ParentNode = 
 export function findOrderDateAnchor(root: ParentNode = document): HTMLElement | null {
   return root.querySelector<HTMLElement>('.o_form_view [name="date_order"]');
 }
+
+export function findContractNumberAnchor(root: ParentNode = document): HTMLElement | null {
+  return (
+    root.querySelector<HTMLElement>('.o_form_view h1 [name="client_order_ref"] span') ??
+    root.querySelector<HTMLElement>('.o_form_view h1 [name="client_order_ref"]')
+  );
+}

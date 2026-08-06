@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  findContractNumberAnchor,
   findOrderDateAnchor,
   isAllowedOdooLocation,
   isRenderedSubscriptionForm,
@@ -60,5 +61,13 @@ describe('Odoo route eligibility', () => {
     expect(findOrderDateAnchor()).toBe(document.querySelector('[name="date_order"]'));
     document.querySelector('[name="date_order"]')?.remove();
     expect(findOrderDateAnchor()).toBeNull();
+  });
+
+  it('finds the visible contract number text used as the horizontal anchor', () => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <h1><div name="client_order_ref"><span>SO2026/123</span></div></h1>
+      </div>`;
+    expect(findContractNumberAnchor()).toBe(document.querySelector('h1 span'));
   });
 });

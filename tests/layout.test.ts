@@ -20,7 +20,10 @@ describe('native Odoo field anchor', () => {
   beforeEach(() => {
     document.body.innerHTML = `
       <div class="o_form_view">
-        <div class="o_inner_group" style="row-gap: 8px">
+        <div class="o_form_sheet">
+          <h1><div name="client_order_ref"><span>SO2026/123</span></div></h1>
+          <div name="subscription_state"></div>
+          <div class="o_inner_group" style="row-gap: 8px">
           <div class="o_cell o_wrap_label" style="color: rgb(80, 80, 80)">Order Date</div>
           <div class="o_cell">
             <div
@@ -29,6 +32,7 @@ describe('native Odoo field anchor', () => {
             ></div>
           </div>
           <a style="color: rgb(0, 160, 157)">Related value</a>
+          </div>
         </div>
       </div>`;
   });
@@ -37,16 +41,22 @@ describe('native Odoo field anchor', () => {
     const field = document.querySelector<HTMLElement>('[name="date_order"]')!;
     const value = field.closest<HTMLElement>('.o_cell')!;
     const label = value.previousElementSibling as HTMLElement;
+    const contract = document.querySelector<HTMLElement>('h1 span')!;
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
     label.getBoundingClientRect = () => rect(520, 220, 136, 26);
     value.getBoundingClientRect = () => rect(672, 220, 408, 26);
+    contract.getBoundingClientRect = () => rect(40, 165, 280, 40);
+    sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
+    status.getBoundingClientRect = () => rect(900, 165, 90, 21);
 
     expect(measureOrderDateAnchor(document, 760)).toMatchObject({
       bottom: 548,
-      left: 520,
-      width: 560,
-      labelWidth: 136,
-      columnGap: 16,
-      rowGap: 8,
+      left: 368,
+      width: 380,
+      labelWidth: 64,
+      columnGap: 8,
+      rowGap: 4,
       fontSize: '14px',
       lineHeight: '21px',
       labelColor: 'rgb(80, 80, 80)',
@@ -59,11 +69,32 @@ describe('native Odoo field anchor', () => {
     const field = document.querySelector<HTMLElement>('[name="date_order"]')!;
     const value = field.closest<HTMLElement>('.o_cell')!;
     const label = value.previousElementSibling as HTMLElement;
+    const contract = document.querySelector<HTMLElement>('h1 span')!;
+    contract.getBoundingClientRect = () => rect(40, 165, 280, 40);
     label.getBoundingClientRect = () => rect(520, 40, 136, 26);
     value.getBoundingClientRect = () => rect(672, 40, 408, 26);
     expect(measureOrderDateAnchor(document, 760)).toBeNull();
 
     label.getBoundingClientRect = () => rect(520, 220, 0, 0);
     expect(measureOrderDateAnchor(document, 760)).toBeNull();
+  });
+
+  it('stays clear of the native subscription-state badge', () => {
+    const field = document.querySelector<HTMLElement>('[name="date_order"]')!;
+    const value = field.closest<HTMLElement>('.o_cell')!;
+    const label = value.previousElementSibling as HTMLElement;
+    const contract = document.querySelector<HTMLElement>('h1 span')!;
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
+    label.getBoundingClientRect = () => rect(520, 220, 136, 26);
+    value.getBoundingClientRect = () => rect(672, 220, 408, 26);
+    contract.getBoundingClientRect = () => rect(40, 165, 430, 40);
+    sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
+    status.getBoundingClientRect = () => rect(800, 165, 90, 21);
+
+    expect(measureOrderDateAnchor(document, 760)).toMatchObject({
+      left: 518,
+      width: 262,
+    });
   });
 });
