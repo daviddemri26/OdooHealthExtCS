@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Added a Firefox-tolerant contract-title anchor, fixed-size Health circles, outline-only selection, and native color-only Industry hover feedback.
 - Added explicit Arrow Up/Down plus Enter Industry selection and pause-on-hover status timers.
 - Reworked status messages with a prominent primary line, optional secondary detail, and a kind-specific colored outline instead of a small indicator dot.
+- Made every status kind expire automatically while preserving pause-on-hover, including duplicate-health warnings.
+- Relaxed the visual-anchor contract for Firefox's flatter `sale.order` markup and selected the visible Odoo fields across duplicate responsive nodes.
+- Made the inline panel shrink to its current Industry and Health content up to the safe native-layout limit.
+- Changed enabled settings switches to a conventional green state.
 
 ### Security
 

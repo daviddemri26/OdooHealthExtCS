@@ -53,7 +53,7 @@ describe('native Odoo field anchor', () => {
     expect(measureOrderDateAnchor(document)).toMatchObject({
       top: 0,
       left: 344,
-      width: 380,
+      maxWidth: 440,
       labelWidth: 64,
       columnGap: 8,
       rowGap: 4,
@@ -77,10 +77,18 @@ describe('native Odoo field anchor', () => {
     value.getBoundingClientRect = () => rect(672, -180, 408, 26);
     sheet.getBoundingClientRect = () => rect(24, -255, 1080, 800);
     status.getBoundingClientRect = () => rect(900, -235, 90, 21);
-    expect(measureOrderDateAnchor(document)).toMatchObject({ top: 0, left: 344, width: 380 });
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      top: 0,
+      left: 344,
+      maxWidth: 440,
+    });
 
-    label.getBoundingClientRect = () => rect(520, 220, 0, 0);
-    expect(measureOrderDateAnchor(document)).toBeNull();
+    contract.getBoundingClientRect = () => rect(40, 165, 0, 0);
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      top: 0,
+      left: 345.6,
+      maxWidth: 440,
+    });
   });
 
   it('stays clear of the native subscription-state badge', () => {
@@ -98,7 +106,7 @@ describe('native Odoo field anchor', () => {
 
     expect(measureOrderDateAnchor(document)).toMatchObject({
       left: 494,
-      width: 262,
+      maxWidth: 262,
     });
   });
 
@@ -117,6 +125,51 @@ describe('native Odoo field anchor', () => {
     sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
     status.getBoundingClientRect = () => rect(900, 165, 90, 21);
 
-    expect(measureOrderDateAnchor(document)).toMatchObject({ top: 0, left: 344, width: 380 });
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      top: 0,
+      left: 344,
+      maxWidth: 440,
+    });
+  });
+
+  it('supports the flatter sale-order field structure rendered in Firefox', () => {
+    document.querySelector('.o_inner_group')!.innerHTML = `
+      <label style="color: rgb(80, 80, 80)">Order Date</label>
+      <div
+        name="date_order"
+        style="font-family: Arial; font-size: 14px; line-height: 21px; color: rgb(40, 40, 40)"
+      ></div>
+      <a style="color: rgb(0, 160, 157)">Related value</a>`;
+    const contract = document.querySelector<HTMLElement>('h1 span')!;
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
+    contract.getBoundingClientRect = () => rect(40, 165, 280, 40);
+    sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
+    status.getBoundingClientRect = () => rect(900, 165, 90, 21);
+
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      top: 0,
+      left: 344,
+      maxWidth: 440,
+      labelColor: 'rgb(80, 80, 80)',
+      valueColor: 'rgb(40, 40, 40)',
+      linkColor: 'rgb(0, 160, 157)',
+    });
+  });
+
+  it('keeps rendering when Firefox reports a transient zero-width title and no date field', () => {
+    document.querySelector('[name="date_order"]')?.remove();
+    const contract = document.querySelector<HTMLElement>('h1 span')!;
+    const sheet = document.querySelector<HTMLElement>('.o_form_sheet')!;
+    const status = document.querySelector<HTMLElement>('[name="subscription_state"]')!;
+    contract.getBoundingClientRect = () => rect(40, 165, 0, 0);
+    sheet.getBoundingClientRect = () => rect(24, 145, 1080, 800);
+    status.getBoundingClientRect = () => rect(900, 165, 90, 21);
+
+    expect(measureOrderDateAnchor(document)).toMatchObject({
+      top: 0,
+      left: 345.6,
+      maxWidth: 440,
+    });
   });
 });

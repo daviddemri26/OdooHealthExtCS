@@ -54,6 +54,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Desktop widths 1280, 1440, 1920, and a narrow 1024 layout.
 - [ ] 100%, 125%, and 150% zoom.
 - [ ] The framed Industry and Health panel is attached to the form-sheet top edge and horizontally tied to the contract number with chatter open/closed, at every tested width and zoom.
+- [ ] The frame shrinks when a shorter industry is selected and expands only up to the safe native-layout limit for longer content.
 - [ ] Long industry names truncate before the native subscription-state badge and remain fully discoverable in the dropdown.
 - [ ] The panel scrolls with the Odoo form and stays below sticky action bars, user-preference dialogs, email composers, and other native modals.
 - [ ] Industry hover changes only the link color and never adds an underline.
@@ -61,6 +62,8 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Success and error status messages use a colored outline, a prominent primary line, and dismiss automatically; Health confirmation explains the delayed native Tags-widget refresh.
 - [ ] Hovering a status message pauses its dismissal timer; leaving resumes from the remaining time.
 - [ ] The panel appears on equivalent Chrome and Firefox subscription forms, including forms where Odoo renders only the `h1` contract title.
+- [ ] Success, error, warning, and info messages all disappear automatically at their documented durations.
+- [ ] Enabled settings switches are green in Auto, Light, and Dark appearance modes.
 - [ ] Visible focus, screen-reader labels, reduced motion, no Odoo click blocking, and no clipped dropdown/status UI.
 
 ## Release and privacy

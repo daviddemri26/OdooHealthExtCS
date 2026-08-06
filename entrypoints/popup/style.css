@@ -43,6 +43,7 @@ input {
   --border: rgba(73, 58, 69, 0.12);
   --accent: #714b67;
   --accent-soft: #eee6ec;
+  --switch-active: #34c759;
   width: 380px;
   height: 590px;
   overflow: hidden;
@@ -59,6 +60,7 @@ input {
   --border: rgba(255, 255, 255, 0.1);
   --accent: #c3a5b9;
   --accent-soft: rgba(195, 165, 185, 0.12);
+  --switch-active: #34c759;
 }
 
 .popup-header {
@@ -189,7 +191,7 @@ section h2 {
 }
 
 .setting-row input:checked + .switch {
-  background: var(--accent);
+  background: var(--switch-active);
 }
 
 .setting-row input:checked + .switch::after {
@@ -197,7 +199,7 @@ section h2 {
 }
 
 .setting-row input:focus-visible + .switch {
-  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline: 3px solid color-mix(in srgb, var(--switch-active) 32%, transparent);
   outline-offset: 2px;
 }
 

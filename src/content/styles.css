@@ -49,6 +49,7 @@ button {
   position: absolute;
   z-index: 2;
   display: grid;
+  width: max-content;
   align-items: center;
   padding: 6px 10px;
   pointer-events: none;
@@ -349,6 +350,7 @@ button {
   font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
+  white-space: pre-line;
 }
 
 .status-action {

@@ -3,7 +3,7 @@ import { findContractNumberAnchor, findOrderDateAnchor } from './routes';
 export interface OdooFieldAnchor {
   top: number;
   left: number;
-  width: number;
+  maxWidth: number;
   labelWidth: number;
   columnGap: number;
   rowGap: number;
@@ -18,55 +18,61 @@ export interface OdooFieldAnchor {
 export function measureOrderDateAnchor(root: ParentNode = document): OdooFieldAnchor | null {
   const field = findOrderDateAnchor(root);
   const contractNumber = findContractNumberAnchor(root);
-  const valueCell = field?.closest<HTMLElement>('.o_cell');
-  const labelCell = valueCell?.previousElementSibling as HTMLElement | null;
-  const group = field?.closest<HTMLElement>('.o_inner_group');
-  if (
-    !field ||
-    !contractNumber ||
-    !valueCell ||
-    !labelCell ||
-    !group ||
-    !labelCell.classList.contains('o_wrap_label')
-  ) {
-    return null;
-  }
+  const sheet =
+    field?.closest<HTMLElement>('.o_form_sheet') ??
+    contractNumber?.closest<HTMLElement>('.o_form_sheet') ??
+    Array.from(root.querySelectorAll<HTMLElement>('.o_form_view .o_form_sheet')).find(
+      (candidate) => {
+        const bounds = candidate.getBoundingClientRect();
+        return bounds.width > 0 && bounds.height > 0;
+      },
+    );
+  if (!sheet) return null;
 
-  const labelBounds = labelCell.getBoundingClientRect();
-  const valueBounds = valueCell.getBoundingClientRect();
-  const contractBounds = contractNumber.getBoundingClientRect();
-  const sheetBounds = field.closest<HTMLElement>('.o_form_sheet')?.getBoundingClientRect();
+  const contractBounds = contractNumber?.getBoundingClientRect();
+  const sheetBounds = sheet?.getBoundingClientRect();
   const statusBounds = root
     .querySelector<HTMLElement>('.o_form_view [name="subscription_state"]')
     ?.getBoundingClientRect();
-  if (
-    labelBounds.width <= 0 ||
-    valueBounds.width <= 0 ||
-    contractBounds.width <= 0 ||
-    !sheetBounds ||
-    sheetBounds.width <= 0 ||
-    sheetBounds.height <= 0
-  ) {
+  if (!sheetBounds || sheetBounds.width <= 0 || sheetBounds.height <= 0) {
     return null;
   }
 
-  const fieldStyle = getComputedStyle(field);
-  const labelStyle = getComputedStyle(labelCell);
-  const link = group.querySelector<HTMLElement>('a:not(.o_external_button)');
+  const group = field?.closest<HTMLElement>('.o_inner_group');
+  const label =
+    group?.querySelector<HTMLElement>('.o_wrap_label, label') ??
+    sheet?.querySelector<HTMLElement>('.o_inner_group .o_wrap_label, .o_inner_group label') ??
+    contractNumber ??
+    sheet;
+  const fieldStyle = getComputedStyle(field ?? sheet);
+  const labelStyle = getComputedStyle(label);
+  const link =
+    group?.querySelector<HTMLElement>('a:not(.o_external_button)') ??
+    sheet?.querySelector<HTMLElement>('a:not(.o_external_button)');
   const linkColor = link ? getComputedStyle(link).color : '#00a09d';
-  const leftViewport = contractBounds.right + 48;
-  const left = leftViewport - sheetBounds.left;
-  const safeRight = Math.min(
-    sheetBounds.right - 16,
-    statusBounds?.left ? statusBounds.left - 20 : Number.POSITIVE_INFINITY,
+  const statusLeft =
+    statusBounds && statusBounds.width > 0 && statusBounds.left > sheetBounds.left
+      ? statusBounds.left - 20
+      : Number.POSITIVE_INFINITY;
+  const safeRight = Math.min(sheetBounds.right - 16, statusLeft);
+  const measuredContractRight =
+    contractBounds && contractBounds.width > 0 ? contractBounds.right : undefined;
+  const preferredLeftViewport = measuredContractRight
+    ? measuredContractRight + 48
+    : sheetBounds.left + Math.min(360, Math.max(240, sheetBounds.width * 0.32));
+  const minimumPanelWidth = 230;
+  const latestSafeLeft = Math.max(sheetBounds.left + 16, safeRight - minimumPanelWidth);
+  const leftViewport = Math.min(preferredLeftViewport, latestSafeLeft);
+  const left = Math.max(16, leftViewport - sheetBounds.left);
+  const maxWidth = Math.max(
+    minimumPanelWidth,
+    Math.min(440, sheetBounds.width - left - 16, safeRight - (sheetBounds.left + left)),
   );
-  const width = Math.min(380, safeRight - leftViewport);
-  if (width < 260) return null;
 
   return {
     top: 0,
     left,
-    width,
+    maxWidth,
     labelWidth: 64,
     columnGap: 8,
     rowGap: 4,

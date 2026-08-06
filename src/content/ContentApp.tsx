@@ -34,6 +34,13 @@ interface ContentAppProps {
   panelContainer: HTMLElement;
 }
 
+const STATUS_DURATIONS: Record<StatusMessage['kind'], number> = {
+  success: 7_000,
+  error: 8_000,
+  warning: 8_000,
+  info: 6_000,
+};
+
 function createMessage(
   kind: StatusMessage['kind'],
   message: string,
@@ -44,7 +51,7 @@ function createMessage(
     kind,
     message,
     ...options,
-    dismissAfterMs: options.dismissAfterMs ?? (kind === 'error' ? 8_000 : undefined),
+    dismissAfterMs: options.dismissAfterMs ?? STATUS_DURATIONS[kind],
   };
 }
 
@@ -80,7 +87,9 @@ export function StatusBar({
   }, [clearTimer, onDismiss]);
 
   useEffect(() => {
-    const dismissAfterMs = status?.dismissAfterMs ?? (status?.kind === 'error' ? 8_000 : undefined);
+    const dismissAfterMs = status
+      ? (status.dismissAfterMs ?? STATUS_DURATIONS[status.kind])
+      : undefined;
     clearTimer();
     remainingRef.current = dismissAfterMs ?? 0;
     if (!status) hoveringRef.current = false;
@@ -515,7 +524,7 @@ export function ContentApp({
       notify(
         createMessage('success', message, {
           detail:
-            'The health indicator above is current. Odoo’s Tags field will update after the next page reload.',
+            'The health indicator above is current.\nOdoo’s Tags field will update after the next page reload.',
           dismissAfterMs: 7_000,
           action: {
             label: 'Undo',
@@ -615,8 +624,8 @@ export function ContentApp({
     ? ({
         top: anchor.top,
         left: anchor.left,
-        width: anchor.width,
-        gridTemplateColumns: `${anchor.labelWidth}px minmax(0, 1fr)`,
+        maxWidth: anchor.maxWidth,
+        gridTemplateColumns: `${anchor.labelWidth}px minmax(0, auto)`,
         columnGap: anchor.columnGap,
         rowGap: anchor.rowGap,
         fontFamily: anchor.fontFamily,

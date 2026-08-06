@@ -124,6 +124,25 @@ describe('content controls', () => {
     }
   });
 
+  it('automatically dismisses a warning message', () => {
+    vi.useFakeTimers();
+    try {
+      const dismiss = vi.fn();
+      render(
+        <StatusBar
+          status={{ id: 'status-warning', kind: 'warning', message: 'Choose one value.' }}
+          onDismiss={dismiss}
+        />,
+      );
+      act(() => vi.advanceTimersByTime(7_999));
+      expect(dismiss).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(dismiss).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('pauses automatic dismissal while the pointer is over the message', () => {
     vi.useFakeTimers();
     try {
