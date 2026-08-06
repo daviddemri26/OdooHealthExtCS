@@ -21,7 +21,7 @@
   "version": {
     "license": "MIT",
     "release_notes": {
-      "en-US": "Initial release with account-health controls, a searchable industry drawer, settings, safe Undo, and light/dark appearance."
+      "en-US": "Initial release with Odoo-aligned account-health controls, a searchable inline industry dropdown, settings, safe Undo, and light/dark appearance."
     },
     "approval_notes": "Built from the attached human-readable source archive with Node 22 and pnpm 10. The web-ext static innerHTML notices originate in the generated React runtime; extension source does not use dangerouslySetInnerHTML or process untrusted HTML."
   }

@@ -13,7 +13,7 @@
 
 - [ ] Subscription with Account health not set.
 - [ ] Active High/Medium/Low state with subdued inactive controls.
-- [ ] Industry handle and open searchable drawer with sanitized choices.
+- [ ] Industry and Health aligned above Order Date, plus the open searchable dropdown with sanitized choices.
 - [ ] Settings popup with feature and appearance controls.
 - [ ] One light-mode and one dark-mode composition.
 

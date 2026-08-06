@@ -51,8 +51,6 @@ export function isRenderedSubscriptionForm(pathname: string, root: ParentNode = 
   );
 }
 
-export function findHealthAnchor(root: ParentNode = document): HTMLElement | null {
-  return root.querySelector<HTMLElement>(
-    '.o_form_view .o_form_sheet, .o_form_view .o_form_sheet_bg',
-  );
+export function findOrderDateAnchor(root: ParentNode = document): HTMLElement | null {
+  return root.querySelector<HTMLElement>('.o_form_view [name="date_order"]');
 }

@@ -14,6 +14,8 @@ A separate script runs at `document_start` with `world: "MAIN"`. It shares the O
 
 Odoo is a single-page application. The entrypoint watches DOM changes, URL changes, history events, viewport changes, and theme changes, then schedules an idempotent render. Feature state resets when the active sale order changes. The UI mounts only when a rendered Odoo form includes `partner_id` and either a subscription route or `subscription_state`.
 
+The visual controls locate the native `[name="date_order"]` widget on each render. They measure its label and value cells, grid gaps, font, colors, and viewport position, then place a transparent Shadow DOM grid immediately above that row. Industry appears first, Health second, and Order Date remains directly below. This makes the controls follow Odoo's real form column when chatter, zoom, responsive width, or SPA rerenders change the layout. If the Order Date anchor is absent or offscreen, the controls do not fall back to an unrelated pixel position.
+
 `FeatureModule` defines the reusable eligibility and lifecycle contract for future modules. The initial React implementation shares one mount while the health and industry services remain independently enabled and isolated.
 
 ## Odoo RPC
@@ -39,7 +41,7 @@ Duplicate health tags display a warning and an indeterminate textual state. The 
 
 ## Industry
 
-The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact ID for all reads and writes. Choices come dynamically from `res.partner.industry`; clearing writes `false`. The drawer provides search, native Tab/Enter behavior, Arrow Up/Down option movement, Escape to close, and current-selection semantics.
+The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact ID for all reads and writes. Choices come dynamically from `res.partner.industry`; clearing writes `false`. The current value appears as an Odoo-style link above Health. Clicking it opens a compact anchored dropdown with search, outside-click dismissal, native Tab/Enter behavior, Arrow Up/Down option movement, Escape to close, and current-selection semantics.
 
 ## Settings and compatibility
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  findOrderDateAnchor,
   isAllowedOdooLocation,
   isRenderedSubscriptionForm,
   parseSubscriptionRoute,
@@ -49,5 +50,15 @@ describe('Odoo route eligibility', () => {
     document.querySelector('[name="subscription_state"]')?.remove();
     expect(isRenderedSubscriptionForm('/odoo/sale.order/42')).toBe(false);
     expect(isRenderedSubscriptionForm('/odoo/subscriptions/42')).toBe(true);
+  });
+
+  it('finds the native Order Date field used as the visual anchor', () => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="date_order"></div>
+      </div>`;
+    expect(findOrderDateAnchor()).toBe(document.querySelector('[name="date_order"]'));
+    document.querySelector('[name="date_order"]')?.remove();
+    expect(findOrderDateAnchor()).toBeNull();
   });
 });

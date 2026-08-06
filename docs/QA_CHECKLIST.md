@@ -39,7 +39,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 
 ## Industry
 
-- [ ] Drawer reads the exact subscription `partner_id`, including contact/company distinctions.
+- [ ] Inline field reads the exact subscription `partner_id`, including contact/company distinctions.
 - [ ] Choices load dynamically and sort correctly.
 - [ ] Search, No industry, current highlighting, Tab, Enter, Arrow Up/Down, and Escape work.
 - [ ] Set, clear, and Undo behave correctly; Undo refuses after an external change.
@@ -51,7 +51,8 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Odoo light and dark modes; extension Auto, Light, and Dark.
 - [ ] Desktop widths 1280, 1440, 1920, and a narrow 1024 layout.
 - [ ] 100%, 125%, and 150% zoom.
-- [ ] Visible focus, screen-reader labels, reduced motion, no Odoo click blocking, and no clipped drawer/status UI.
+- [ ] Industry and Health remain aligned directly above Order Date with chatter open/closed, at every tested width and zoom.
+- [ ] Visible focus, screen-reader labels, reduced motion, no Odoo click blocking, and no clipped dropdown/status UI.
 
 ## Release and privacy
 

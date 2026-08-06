@@ -12,9 +12,9 @@ Faster account health and customer industry updates for authorized Odoo Customer
 
 OdooHealthExtCS adds two focused productivity controls to Odoo subscription records for authorized internal Customer Success users.
 
-Set Account health to High, Medium, or Low from a compact subscription-header control. The extension identifies the canonical Odoo tags, preserves unrelated tags, removes duplicate health values on the next selection, and lets you clear the active value.
+Set Account health to High, Medium, or Low from a compact Odoo-style field placed directly above Order Date. The extension identifies the canonical Odoo tags, preserves unrelated tags, removes duplicate health values on the next selection, and lets you clear the active value.
 
-Open the Industry quick picker from the right edge of a subscription to search and update the exact linked customer without navigating away. Clear the field with No industry when appropriate.
+Click the Industry value directly above Health to open a compact searchable dropdown and update the exact linked customer without navigating away. Clear the field with No industry when appropriate.
 
 Smooth light and dark interfaces explain the current value and show success, warning, or error feedback. Successful writes include a seven-second Undo action that first confirms the record has not changed elsewhere.
 
@@ -30,7 +30,7 @@ Make required account-health and customer-industry maintenance faster and safer 
 
 - High, Medium, Low, and clear account-health actions.
 - Preservation of unrelated Odoo tags and safe duplicate cleanup.
-- Searchable industry drawer using the subscription's exact customer.
+- Searchable inline industry dropdown using the subscription's exact customer.
 - No industry clearing option and current-value highlighting.
 - Keyboard navigation, light/dark appearance, status feedback, and safe Undo.
 - Per-feature controls and sanitized compatibility status.

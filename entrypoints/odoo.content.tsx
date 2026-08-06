@@ -1,14 +1,11 @@
 import { createRoot, type Root } from 'react-dom/client';
 
-import { ContentApp, type AnchorPosition } from '../src/content/ContentApp';
+import { ContentApp } from '../src/content/ContentApp';
 import { createExtensionHost } from '../src/content/host';
 import contentStyles from '../src/content/styles.css?inline';
-import {
-  findHealthAnchor,
-  isRenderedSubscriptionForm,
-  parseSubscriptionRoute,
-} from '../src/odoo/routes';
+import { isRenderedSubscriptionForm, parseSubscriptionRoute } from '../src/odoo/routes';
 import { PageContextOdooGateway } from '../src/odoo/gateway';
+import { measureOrderDateAnchor } from '../src/odoo/layout';
 import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from '../src/shared/settings';
 import type { ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
 
@@ -22,22 +19,15 @@ function parseColor(value: string): [number, number, number] | null {
 
 function detectOdooTheme(): 'light' | 'dark' {
   const sample =
-    findHealthAnchor() ?? document.querySelector<HTMLElement>('.o_web_client') ?? document.body;
+    document.querySelector<HTMLElement>('.o_form_view .o_form_sheet') ??
+    document.querySelector<HTMLElement>('.o_form_view .o_form_sheet_bg') ??
+    document.querySelector<HTMLElement>('.o_web_client') ??
+    document.body;
   const color = parseColor(getComputedStyle(sample).backgroundColor);
   if (!color) return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const [red, green, blue] = color;
   const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
   return luminance < 0.48 ? 'dark' : 'light';
-}
-
-function getAnchorPosition(): AnchorPosition {
-  const anchor = findHealthAnchor();
-  if (!anchor) return { top: 92, right: 28 };
-  const bounds = anchor.getBoundingClientRect();
-  return {
-    top: Math.max(82, Math.min(bounds.top + 28, window.innerHeight - 170)),
-    right: Math.max(24, window.innerWidth - bounds.right + 24),
-  };
 }
 
 function getActiveRoute(): SubscriptionRoute | null {
@@ -65,7 +55,7 @@ export default defineContentScript({
           route={getActiveRoute()}
           settings={settings}
           detectedTheme={detectOdooTheme()}
-          anchor={getAnchorPosition()}
+          anchor={measureOrderDateAnchor()}
         />,
       );
     };

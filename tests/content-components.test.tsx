@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HealthControl, IndustryDrawer, StatusBar } from '../src/content/ContentApp';
+import { HealthControl, IndustryField, StatusBar } from '../src/content/ContentApp';
 
 describe('content controls', () => {
   it('communicates active health in text and clicking it requests a clear-capable selection', () => {
@@ -16,7 +16,6 @@ describe('content controls', () => {
         pending={false}
         error={null}
         onSelect={onSelect}
-        anchor={{ top: 100, right: 20 }}
       />,
     );
     expect(screen.getByText('High')).toBeInTheDocument();
@@ -27,7 +26,7 @@ describe('content controls', () => {
   it('filters industries and exposes a clearing choice', () => {
     const onToggle = vi.fn();
     render(
-      <IndustryDrawer
+      <IndustryField
         context={{
           partnerId: 81,
           partnerName: 'Demo Customer',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
 import {
   applyHealthChange,
@@ -14,6 +14,7 @@ import {
   type IndustryContext,
 } from '../features/industry/service';
 import { OdooGatewayError } from '../odoo/gateway';
+import type { OdooFieldAnchor } from '../odoo/layout';
 import { setCompatibilityStatus } from '../shared/compatibility';
 import type {
   ExtensionSettings,
@@ -23,17 +24,12 @@ import type {
   SubscriptionRoute,
 } from '../shared/types';
 
-export interface AnchorPosition {
-  top: number;
-  right: number;
-}
-
 interface ContentAppProps {
   gateway: OdooGateway;
   route: SubscriptionRoute | null;
   settings: ExtensionSettings;
   detectedTheme: 'light' | 'dark';
-  anchor: AnchorPosition;
+  anchor: OdooFieldAnchor | null;
 }
 
 function createMessage(
@@ -114,14 +110,12 @@ export function HealthControl({
   pending,
   error,
   onSelect,
-  anchor,
 }: {
   context: HealthContext | null;
   loading: boolean;
   pending: boolean;
   error: string | null;
   onSelect: (state: Exclude<HealthState, null>) => void;
-  anchor: AnchorPosition;
 }): React.JSX.Element {
   const currentLabel = context?.snapshot.duplicate
     ? 'Multiple values'
@@ -130,42 +124,40 @@ export function HealthControl({
       : 'Not set';
 
   return (
-    <section
-      className="health-control"
-      aria-label="Account health"
-      style={{ top: anchor.top, right: anchor.right }}
-    >
-      <div className="health-heading">
-        <span>Account health</span>
-        <strong>{loading ? 'Loading…' : error ? 'Unavailable' : currentLabel}</strong>
+    <>
+      <div className="native-field-label">Health</div>
+      <div className="native-field-value health-field" aria-label="Account health">
+        <span className="health-current">
+          {loading ? 'Loading…' : error ? 'Unavailable' : currentLabel}
+        </span>
+        <div className="health-options" aria-busy={loading || pending}>
+          {HEALTH_OPTIONS.map(({ state, label }) => {
+            const active = !context?.snapshot.duplicate && context?.snapshot.state === state;
+            const action = active
+              ? `Clear ${label.toLowerCase()} health`
+              : `Set health to ${label}`;
+            return (
+              <button
+                key={state}
+                type="button"
+                className={`health-dot health-${state}${active ? ' is-active' : ''}`}
+                aria-label={action}
+                aria-pressed={active}
+                title={action}
+                disabled={loading || pending || Boolean(error)}
+                onClick={() => onSelect(state)}
+              >
+                <span aria-hidden="true">{label[0]}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
-      <div className="health-options" aria-busy={loading || pending}>
-        {HEALTH_OPTIONS.map(({ state, label }) => {
-          const active = !context?.snapshot.duplicate && context?.snapshot.state === state;
-          const action = active ? `Clear ${label.toLowerCase()} health` : `Set health to ${label}`;
-          return (
-            <button
-              key={state}
-              type="button"
-              className={`health-dot health-${state}${active ? ' is-active' : ''}`}
-              aria-label={action}
-              title={action}
-              disabled={loading || pending || Boolean(error)}
-              onClick={() => onSelect(state)}
-            >
-              <span aria-hidden="true">{label[0]}</span>
-            </button>
-          );
-        })}
-      </div>
-      {context?.snapshot.duplicate ? (
-        <span className="health-warning">Choose one value to clean up duplicates.</span>
-      ) : null}
-    </section>
+    </>
   );
 }
 
-export function IndustryDrawer({
+export function IndustryField({
   context,
   open,
   loading,
@@ -183,6 +175,8 @@ export function IndustryDrawer({
   onSelect: (industryId: number | null) => void;
 }): React.JSX.Element {
   const [query, setQuery] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -194,6 +188,22 @@ export function IndustryDrawer({
     const timer = window.setTimeout(() => searchRef.current?.focus(), 120);
     return () => window.clearTimeout(timer);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutsidePointer = (event: PointerEvent): void => {
+      const path = event.composedPath();
+      if (
+        (triggerRef.current && path.includes(triggerRef.current)) ||
+        (popoverRef.current && path.includes(popoverRef.current))
+      ) {
+        return;
+      }
+      onToggle();
+    };
+    document.addEventListener('pointerdown', handleOutsidePointer, true);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointer, true);
+  }, [onToggle, open]);
 
   const industries = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -224,7 +234,7 @@ export function IndustryDrawer({
     options[next]?.focus();
   };
 
-  const handleDrawerKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+  const handlePickerKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault();
       onToggle();
@@ -238,81 +248,84 @@ export function IndustryDrawer({
 
   return (
     <>
-      <button
-        type="button"
-        className={`industry-handle${open ? ' is-open' : ''}`}
-        aria-expanded={open}
-        aria-controls="odoo-health-industry-drawer"
-        onClick={onToggle}
-      >
-        <span className="industry-handle-icon" aria-hidden="true">
-          ◫
-        </span>
-        <span>Industry</span>
-      </button>
-      <aside
-        id="odoo-health-industry-drawer"
-        className={`industry-drawer${open ? ' is-open' : ''}`}
-        aria-hidden={!open}
-        onKeyDown={handleDrawerKeyDown}
-      >
-        <header className="drawer-header">
-          <div>
-            <span className="eyebrow">Customer profile</span>
-            <h2>Industry</h2>
-          </div>
-          <button type="button" aria-label="Close industry picker" onClick={onToggle}>
-            ×
-          </button>
-        </header>
-        <div className="drawer-context">
-          <strong>
-            {loading ? 'Loading customer…' : (context?.partnerName ?? 'Customer unavailable')}
-          </strong>
-          <span>{error ?? currentName}</span>
-        </div>
-        <label className="search-field">
-          <span className="sr-only">Search industries</span>
-          <input
-            ref={searchRef}
-            type="search"
-            placeholder="Search industries…"
-            value={query}
-            disabled={loading || Boolean(error)}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <div ref={listRef} className="industry-list" role="listbox" aria-busy={loading || pending}>
-          <button
-            type="button"
-            role="option"
-            aria-selected={context?.currentIndustryId === null}
-            className={context?.currentIndustryId === null ? 'is-selected' : ''}
-            disabled={loading || pending || Boolean(error)}
-            onClick={() => onSelect(null)}
+      <div className="native-field-label">Industry</div>
+      <div className="native-field-value industry-field">
+        <button
+          ref={triggerRef}
+          type="button"
+          className="industry-trigger"
+          aria-expanded={open}
+          aria-controls="odoo-health-industry-picker"
+          disabled={loading || Boolean(error)}
+          onClick={onToggle}
+        >
+          <span>{loading ? 'Loading…' : error ? 'Unavailable' : currentName}</span>
+          <span className="industry-caret" aria-hidden="true" />
+        </button>
+        {open ? (
+          <div
+            ref={popoverRef}
+            id="odoo-health-industry-picker"
+            className="industry-popover"
+            onKeyDown={handlePickerKeyDown}
           >
-            <span>No industry</span>
-            <small>Clear the current value</small>
-          </button>
-          {industries.map((industry) => (
-            <button
-              key={industry.id}
-              type="button"
-              role="option"
-              aria-selected={context?.currentIndustryId === industry.id}
-              className={context?.currentIndustryId === industry.id ? 'is-selected' : ''}
-              disabled={pending || Boolean(error)}
-              onClick={() => onSelect(industry.id)}
+            <label className="search-field">
+              <span className="sr-only">Search industries</span>
+              <input
+                ref={searchRef}
+                type="search"
+                placeholder="Search industries…"
+                value={query}
+                disabled={loading || Boolean(error)}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <div
+              ref={listRef}
+              className="industry-list"
+              role="listbox"
+              aria-busy={loading || pending}
             >
-              <span>{industry.name}</span>
-              {context?.currentIndustryId === industry.id ? <small>Current selection</small> : null}
-            </button>
-          ))}
-          {!loading && !error && industries.length === 0 ? (
-            <p className="empty-state">No industry matches your search.</p>
-          ) : null}
-        </div>
-      </aside>
+              <button
+                type="button"
+                role="option"
+                aria-selected={context?.currentIndustryId === null}
+                className={context?.currentIndustryId === null ? 'is-selected' : ''}
+                disabled={loading || pending || Boolean(error)}
+                onClick={() => onSelect(null)}
+              >
+                <span>No industry</span>
+                {context?.currentIndustryId === null ? (
+                  <span className="option-check" aria-hidden="true">
+                    ✓
+                  </span>
+                ) : null}
+              </button>
+              {industries.map((industry) => (
+                <button
+                  key={industry.id}
+                  type="button"
+                  role="option"
+                  aria-selected={context?.currentIndustryId === industry.id}
+                  className={context?.currentIndustryId === industry.id ? 'is-selected' : ''}
+                  disabled={pending || Boolean(error)}
+                  onClick={() => onSelect(industry.id)}
+                >
+                  <span>{industry.name}</span>
+                  {context?.currentIndustryId === industry.id ? (
+                    <span className="option-check" aria-hidden="true">
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+              {!loading && !error && industries.length === 0 ? (
+                <p className="empty-state">No industry matches your search.</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </>
   );
 }
@@ -533,29 +546,49 @@ export function ContentApp({
   if (!route || !settings.enabled) return null;
 
   const theme = settings.appearance === 'auto' ? detectedTheme : settings.appearance;
+  const nativeFieldStyle = anchor
+    ? ({
+        bottom: anchor.bottom,
+        left: anchor.left,
+        width: anchor.width,
+        gridTemplateColumns: `${anchor.labelWidth}px minmax(0, 1fr)`,
+        columnGap: anchor.columnGap,
+        rowGap: anchor.rowGap,
+        fontFamily: anchor.fontFamily,
+        fontSize: anchor.fontSize,
+        lineHeight: anchor.lineHeight,
+        '--odoo-label-color': anchor.labelColor,
+        '--odoo-value-color': anchor.valueColor,
+        '--odoo-link-color': anchor.linkColor,
+      } as CSSProperties)
+    : undefined;
+  const showNativeFields = anchor && (settings.features.industry || settings.features.health);
 
   return (
     <div className={`extension-shell theme-${theme}`} data-theme={theme}>
-      {settings.features.health ? (
-        <HealthControl
-          context={health}
-          loading={healthLoading}
-          pending={healthPending}
-          error={healthError}
-          onSelect={(state) => void selectHealth(state)}
-          anchor={anchor}
-        />
-      ) : null}
-      {settings.features.industry ? (
-        <IndustryDrawer
-          context={industry}
-          open={industryOpen}
-          loading={industryLoading}
-          pending={industryPending}
-          error={industryError}
-          onToggle={() => setIndustryOpen((value) => !value)}
-          onSelect={(industryId) => void selectIndustry(industryId)}
-        />
+      {showNativeFields ? (
+        <section className="native-field-stack" style={nativeFieldStyle} aria-label="Customer data">
+          {settings.features.industry ? (
+            <IndustryField
+              context={industry}
+              open={industryOpen}
+              loading={industryLoading}
+              pending={industryPending}
+              error={industryError}
+              onToggle={() => setIndustryOpen((value) => !value)}
+              onSelect={(industryId) => void selectIndustry(industryId)}
+            />
+          ) : null}
+          {settings.features.health ? (
+            <HealthControl
+              context={health}
+              loading={healthLoading}
+              pending={healthPending}
+              error={healthError}
+              onSelect={(state) => void selectHealth(state)}
+            />
+          ) : null}
+        </section>
       ) : null}
       <StatusBar status={status} onDismiss={dismissStatus} />
     </div>
