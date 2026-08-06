@@ -8,6 +8,14 @@ Confirm the URL starts exactly with `https://www.odoo.com/odoo`, the active page
 
 Sign in to Odoo again in the same tab and reload the subscription. The extension does not store or refresh sessions and cannot ask for credentials.
 
+## Extension connection unavailable
+
+This status means the isolated interface could not complete its versioned handshake with the `MAIN`-world page bridge. Reload the Odoo tab after installing or reloading the extension. If it persists, reload the unpacked extension in the browser's extension page, then reload the Odoo tab. Do not broaden site permissions or enable cookie access.
+
+## Request timed out or network unavailable
+
+A timeout means the page bridge started correctly but Odoo did not complete the allowed request within 15 seconds. A network status means the browser could not reach the same-origin Odoo endpoint. Confirm the Odoo page itself still works, retry once, and record only the sanitized compatibility code if support is needed.
+
 ## Permission or access denied
 
 Your Odoo user may read the record but lack write access to the relevant field. Verify the same change can be made through Odoo's native interface. Request the correct Odoo access through normal internal channels; do not grant the extension broader browser permissions.
@@ -26,7 +34,7 @@ Keep the error visible, confirm connectivity and Odoo permissions, reload the re
 
 ## Compatibility warning after an Odoo update
 
-Record the extension version, Odoo version, browser/version, sanitized compatibility code, and steps using a demo record. Follow the Odoo 19.x or 20 validation process in [ODOO_COMPATIBILITY.md](ODOO_COMPATIBILITY.md). Never attach raw network responses or real customer data.
+An incompatible-endpoint status means an attempted operation no longer matches the bridge allow-list or Odoo endpoint contract. An incompatible-response status means Odoo returned a different safe shape than expected. Record the extension version, Odoo version, browser/version, sanitized compatibility code, and steps using a demo record. Follow the Odoo 19.x or 20 validation process in [ODOO_COMPATIBILITY.md](ODOO_COMPATIBILITY.md). Never attach raw network responses or real customer data.
 
 ## Build or packaging failure
 

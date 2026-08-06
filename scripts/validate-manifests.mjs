@@ -29,12 +29,32 @@ for (const target of targets) {
     `${target.browser}: broad host_permissions are not allowed.`,
   );
   assert(
-    Array.isArray(manifest.content_scripts) && manifest.content_scripts.length === 1,
-    `${target.browser}: exactly one content script is required.`,
+    Array.isArray(manifest.content_scripts) && manifest.content_scripts.length === 2,
+    `${target.browser}: exactly two content scripts are required.`,
+  );
+  for (const contentScript of manifest.content_scripts) {
+    assert(
+      JSON.stringify(contentScript.matches) === JSON.stringify([expectedMatch]),
+      `${target.browser}: every content script must match only ${expectedMatch}.`,
+    );
+    assert(
+      contentScript.all_frames === undefined || contentScript.all_frames === false,
+      `${target.browser}: content scripts must run only in the top frame.`,
+    );
+  }
+  const mainScripts = manifest.content_scripts.filter(
+    (contentScript) => contentScript.world === 'MAIN',
+  );
+  const isolatedScripts = manifest.content_scripts.filter(
+    (contentScript) => contentScript.world === undefined || contentScript.world === 'ISOLATED',
   );
   assert(
-    JSON.stringify(manifest.content_scripts[0].matches) === JSON.stringify([expectedMatch]),
-    `${target.browser}: content script must match only ${expectedMatch}.`,
+    mainScripts.length === 1 && mainScripts[0].run_at === 'document_start',
+    `${target.browser}: one MAIN-world bridge must run at document_start.`,
+  );
+  assert(
+    isolatedScripts.length === 1 && isolatedScripts[0].run_at === 'document_idle',
+    `${target.browser}: one isolated UI script must run at document_idle.`,
   );
 
   if (target.browser === 'firefox') {

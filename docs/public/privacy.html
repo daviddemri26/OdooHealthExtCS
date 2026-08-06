@@ -25,7 +25,9 @@
       <p>
         On matching Odoo subscription pages, enabled features read only the fields needed for
         account health and the exact linked customer's industry. User-requested updates are sent
-        back to Odoo through the browser's current authenticated same-origin session.
+        back to Odoo through the browser's current authenticated same-origin session. A narrow page
+        bridge rejects unrecognized models, methods, fields, searches, and write shapes before
+        contacting Odoo.
       </p>
       <p>
         Processing occurs in the browser and between the browser and <code>www.odoo.com</code>. No
@@ -41,10 +43,10 @@
       </p>
       <h2>Permissions</h2>
       <p>
-        The <code>storage</code> permission saves settings and compatibility status. The content
-        script is limited to <code>https://www.odoo.com/odoo*</code>. No history, tabs, cookies,
-        identity, downloads, clipboard, camera, microphone, geolocation, or broad host permission is
-        requested.
+        The <code>storage</code> permission saves settings and compatibility status. Both the
+        isolated interface script and page-context bridge are limited to
+        <code>https://www.odoo.com/odoo*</code>. No history, tabs, cookies, identity, downloads,
+        clipboard, camera, microphone, geolocation, or broad host permission is requested.
       </p>
       <h2>Sharing and advertising</h2>
       <p>
@@ -59,9 +61,10 @@
       </p>
       <h2>Security and changes</h2>
       <p>
-        The project minimizes permissions, validates model contracts before writes, sanitizes
-        errors, and scans releases for prohibited sensitive material. Material policy changes will
-        be reflected on this page and in the public repository.
+        The project minimizes permissions, validates model contracts before writes, enforces an
+        exact RPC allow-list, sanitizes results and errors, and scans releases for prohibited
+        sensitive material. Material policy changes will be reflected on this page and in the public
+        repository.
       </p>
       <h2>Contact</h2>
       <p>

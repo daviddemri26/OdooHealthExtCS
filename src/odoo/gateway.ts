@@ -6,29 +6,28 @@ import type {
   OdooRecord,
   OdooValues,
 } from '../shared/types';
+import {
+  ODOO_BRIDGE_CHANNEL,
+  ODOO_BRIDGE_ORIGIN,
+  ODOO_BRIDGE_VERSION,
+  bridgeFailure,
+  isOdooBridgeResponse,
+  type OdooBridgeCall,
+  type OdooBridgeRequest,
+} from './bridge-protocol';
 
-interface JsonRpcSuccess<T> {
-  jsonrpc: '2.0';
-  id: number | null;
-  result: T;
+interface BridgeWindow {
+  readonly location: Pick<Location, 'origin'>;
+  postMessage(message: unknown, targetOrigin: string): void;
+  addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+  removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
 }
 
-interface JsonRpcError {
-  jsonrpc: '2.0';
-  id: number | null;
-  error: {
-    code?: number;
-    message?: string;
-    data?: {
-      name?: string;
-      message?: string;
-    };
-  };
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (error: OdooGatewayError) => void;
+  timeout: ReturnType<typeof globalThis.setTimeout>;
 }
-
-type JsonRpcEnvelope<T> = JsonRpcSuccess<T> | JsonRpcError;
-
-let requestId = 0;
 
 export class OdooGatewayError extends Error {
   constructor(
@@ -40,34 +39,26 @@ export class OdooGatewayError extends Error {
   }
 }
 
-function classifyServerError(error: JsonRpcError['error']): OdooGatewayError {
-  const name = error.data?.name ?? '';
-  if (/access(error|denied)/i.test(name)) {
-    return new OdooGatewayError(
-      'access_denied',
-      'Odoo did not allow this change. Check your record permissions.',
-    );
-  }
-  if (/session|authentication/i.test(name)) {
-    return new OdooGatewayError(
-      'session_expired',
-      'Your Odoo session has expired. Sign in again and retry.',
-    );
-  }
-  if (/attributeerror|keyerror|missingerror/i.test(name)) {
-    return new OdooGatewayError(
-      'incompatible_response',
-      'This Odoo version is not currently compatible with the extension.',
-    );
-  }
-  return new OdooGatewayError('server_error', 'Odoo could not complete the request.');
+function randomIdentifier(prefix: string): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return `${prefix}-${uuid}`;
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-export class SameSessionOdooGateway implements OdooGateway {
+export class PageContextOdooGateway implements OdooGateway {
+  private readonly clientId = randomIdentifier('client');
+  private readonly pending = new Map<string, PendingRequest>();
+  private readonly handleMessageBound = (event: MessageEvent): void => this.handleMessage(event);
+  private readyPromise: Promise<void> | null = null;
+  private disposed = false;
+
   constructor(
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly messageWindow: BridgeWindow = window,
     private readonly timeoutMs = 15_000,
-  ) {}
+    private readonly bridgeReadyTimeoutMs = 1_500,
+  ) {
+    this.messageWindow.addEventListener('message', this.handleMessageBound);
+  }
 
   async read<T extends OdooRecord>(model: string, ids: number[], fields: string[]): Promise<T[]> {
     return this.callKw<T[]>(model, 'read', [ids, fields], {});
@@ -101,60 +92,112 @@ export class SameSessionOdooGateway implements OdooGateway {
     return this.callKw<boolean>(model, 'write', [ids, values], {});
   }
 
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.messageWindow.removeEventListener('message', this.handleMessageBound);
+    const failure = bridgeFailure('bridge_unavailable');
+    for (const request of this.pending.values()) {
+      globalThis.clearTimeout(request.timeout);
+      request.reject(new OdooGatewayError(failure.code, failure.message));
+    }
+    this.pending.clear();
+    this.readyPromise = null;
+  }
+
+  private async ensureReady(): Promise<void> {
+    if (!this.readyPromise) {
+      this.readyPromise = this.sendRequest({ kind: 'ping' }, this.bridgeReadyTimeoutMs, true).then(
+        () => undefined,
+      );
+    }
+    try {
+      await this.readyPromise;
+    } catch (error) {
+      this.readyPromise = null;
+      throw error;
+    }
+  }
+
   private async callKw<T>(
     model: string,
     method: string,
     args: unknown[],
     kwargs: Record<string, unknown>,
   ): Promise<T> {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), this.timeoutMs);
+    await this.ensureReady();
+    const call: OdooBridgeCall = { model, method, args, kwargs };
+    return (await this.sendRequest({ kind: 'call', call }, this.timeoutMs, false)) as T;
+  }
 
-    try {
-      const response = await this.fetcher(
-        `/web/dataset/call_kw/${encodeURIComponent(model)}/${encodeURIComponent(method)}`,
-        {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'call',
-            params: { model, method, args, kwargs },
-            id: ++requestId,
-          }),
-          signal: controller.signal,
-        },
-      );
+  private sendRequest(
+    requestBody: Pick<OdooBridgeRequest, 'kind'> &
+      Partial<Pick<Extract<OdooBridgeRequest, { kind: 'call' }>, 'call'>>,
+    timeoutMs: number,
+    isReadyCheck: boolean,
+  ): Promise<unknown> {
+    if (this.disposed || this.messageWindow.location.origin !== ODOO_BRIDGE_ORIGIN) {
+      const failure = bridgeFailure('bridge_unavailable');
+      return Promise.reject(new OdooGatewayError(failure.code, failure.message));
+    }
 
-      const contentType = response.headers.get('content-type') ?? '';
-      if (response.redirected || (!contentType.includes('json') && response.ok)) {
-        throw new OdooGatewayError(
-          'session_expired',
-          'Your Odoo session has expired. Sign in again and retry.',
-        );
-      }
-      if (!response.ok) {
-        throw new OdooGatewayError('network', 'Odoo is temporarily unreachable.');
-      }
+    const requestId = randomIdentifier('request');
+    const request: OdooBridgeRequest =
+      requestBody.kind === 'ping'
+        ? {
+            channel: ODOO_BRIDGE_CHANNEL,
+            version: ODOO_BRIDGE_VERSION,
+            direction: 'request',
+            clientId: this.clientId,
+            requestId,
+            kind: 'ping',
+          }
+        : {
+            channel: ODOO_BRIDGE_CHANNEL,
+            version: ODOO_BRIDGE_VERSION,
+            direction: 'request',
+            clientId: this.clientId,
+            requestId,
+            kind: 'call',
+            call: requestBody.call as OdooBridgeCall,
+          };
 
-      const payload = (await response.json()) as JsonRpcEnvelope<T>;
-      if ('error' in payload) throw classifyServerError(payload.error);
-      if (!('result' in payload)) {
-        throw new OdooGatewayError(
-          'incompatible_response',
-          'Odoo returned an unsupported response.',
-        );
+    return new Promise((resolve, reject) => {
+      const timeout = globalThis.setTimeout(() => {
+        this.pending.delete(requestId);
+        const failure = bridgeFailure(isReadyCheck ? 'bridge_unavailable' : 'timeout');
+        reject(new OdooGatewayError(failure.code, failure.message));
+      }, timeoutMs);
+      this.pending.set(requestId, { resolve, reject, timeout });
+      try {
+        this.messageWindow.postMessage(request, ODOO_BRIDGE_ORIGIN);
+      } catch {
+        globalThis.clearTimeout(timeout);
+        this.pending.delete(requestId);
+        const failure = bridgeFailure('bridge_unavailable');
+        reject(new OdooGatewayError(failure.code, failure.message));
       }
-      return payload.result;
-    } catch (error) {
-      if (error instanceof OdooGatewayError) throw error;
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new OdooGatewayError('network', 'The Odoo request timed out.');
-      }
-      throw new OdooGatewayError('network', 'Odoo is temporarily unreachable.');
-    } finally {
-      window.clearTimeout(timeout);
+    });
+  }
+
+  private handleMessage(event: MessageEvent): void {
+    if (
+      event.source !== (this.messageWindow as unknown as MessageEventSource) ||
+      event.origin !== ODOO_BRIDGE_ORIGIN ||
+      !isOdooBridgeResponse(event.data) ||
+      event.data.clientId !== this.clientId
+    ) {
+      return;
+    }
+
+    const request = this.pending.get(event.data.requestId);
+    if (!request) return;
+    this.pending.delete(event.data.requestId);
+    globalThis.clearTimeout(request.timeout);
+    if (event.data.ok) {
+      request.resolve(event.data.result);
+    } else {
+      request.reject(new OdooGatewayError(event.data.failure.code, event.data.failure.message));
     }
   }
 }

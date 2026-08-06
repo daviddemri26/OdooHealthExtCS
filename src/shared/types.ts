@@ -74,9 +74,12 @@ export interface OdooGateway {
 
 export type CompatibilityCode =
   | 'ready'
+  | 'bridge_unavailable'
+  | 'timeout'
   | 'network'
   | 'session_expired'
   | 'access_denied'
+  | 'incompatible_endpoint'
   | 'missing_health_tags'
   | 'missing_fields'
   | 'incompatible_response'

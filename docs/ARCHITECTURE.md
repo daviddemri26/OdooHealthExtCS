@@ -2,9 +2,11 @@
 
 ## Runtime boundary
 
-WXT generates Chrome/Chromium and Firefox Manifest V3 builds from one React and TypeScript codebase. The only content script matches `https://www.odoo.com/odoo*`. There is no background worker, injected page script, remote executable code, or separate service.
+WXT generates Chrome/Chromium and Firefox Manifest V3 builds from one React and TypeScript codebase. Both content scripts match only `https://www.odoo.com/odoo*`. There is no background worker, remote executable code, external service, cookie permission, or host permission.
 
-The content script creates one fixed host and attaches an open Shadow DOM. All extension styles and React nodes stay inside that boundary; the host itself ignores pointer events while interactive controls opt in.
+The isolated content script runs at `document_idle`, creates one fixed host, and attaches an open Shadow DOM. All extension styles and React nodes stay inside that boundary; the host itself ignores pointer events while interactive controls opt in.
+
+A separate script runs at `document_start` with `world: "MAIN"`. It shares the Odoo page's execution environment only so authenticated same-origin RPC requests use the active page session. It has no UI or extension API access. A versioned singleton replaces a stale listener after development reloads.
 
 ## Routing and lifecycle
 
@@ -16,9 +18,18 @@ Odoo is a single-page application. The entrypoint watches DOM changes, URL chang
 
 ## Odoo RPC
 
-`SameSessionOdooGateway` implements typed `read`, `fieldsGet`, `searchRead`, and `write` calls. Requests use relative `/web/dataset/call_kw/{model}/{method}` URLs, JSON-RPC bodies, `credentials: same-origin`, timeouts, and no stored credentials.
+`PageContextOdooGateway` keeps the typed `read`, `fieldsGet`, `searchRead`, and `write` interface used by features. It exchanges versioned messages with the page bridge using random client and request IDs. Both sides require the exact `window` source, `https://www.odoo.com` origin, protocol version, client ID, and pending request ID. Concurrent calls are correlated independently; stale or foreign responses are ignored. A short handshake distinguishes a missing bridge from a 15-second Odoo timeout, and disposal rejects all pending calls.
 
-Before enabling writes, services confirm the relevant field type and relation. Responses are shape-checked. Authentication, authorization, network, missing-field, incompatibility, and general server failures become sanitized compatibility codes and user messages; raw Odoo error data is never persisted or shown.
+The bridge validates every request before contacting Odoo, then uses the absolute same-origin `/web/dataset/call_kw/{model}/{method}` URL with `credentials: same-origin`. Its allow-list is limited to:
+
+- `sale.order`: field metadata for `tag_ids`; reads of `tag_ids`, `partner_id`, and `subscription_state`; and writes containing only a complete `tag_ids` many-to-many replacement command.
+- `crm.tag`: an exact-name search for the three canonical health tags returning only `id` and `name`.
+- `res.partner`: field metadata, reads, and writes limited to `industry_id`.
+- `res.partner.industry`: the ordered industry search returning only `id` and `name`.
+
+Every other model, method, field, domain, record batch, or write shape fails before fetch. Successful data is reduced to the allowed fields before crossing back to the isolated script.
+
+Before enabling writes, services confirm the relevant field type and relation. Responses are shape-checked. Bridge absence, timeout, authentication, authorization, network, endpoint, missing-field, incompatibility, and general server failures become distinct sanitized compatibility codes and user messages; raw Odoo error data is never forwarded, persisted, or shown.
 
 ## Account health
 

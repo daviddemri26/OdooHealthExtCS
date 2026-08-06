@@ -39,7 +39,7 @@ pnpm test
 pnpm validate
 ```
 
-WXT, React, and TypeScript provide one Manifest V3 codebase for Chrome/Chromium and Firefox. The injected UI lives in a Shadow DOM. Odoo reads and writes use same-origin relative calls to `/web/dataset/call_kw`; the project contains no password, API key, cookie reader, analytics client, or remotely hosted executable code.
+WXT, React, and TypeScript provide one Manifest V3 codebase for Chrome/Chromium and Firefox. The UI runs in an isolated content script and lives in a Shadow DOM. A second, narrowly allow-listed `MAIN`-world bridge performs authenticated same-origin calls to `/web/dataset/call_kw`; it exposes no general-purpose RPC access. The project contains no password, API key, cookie reader, analytics client, or remotely hosted executable code.
 
 See [Architecture](docs/ARCHITECTURE.md), [Odoo compatibility](docs/ODOO_COMPATIBILITY.md), and [Troubleshooting](docs/TROUBLESHOOTING.md).
 

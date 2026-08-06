@@ -6,7 +6,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 
 - [ ] `pnpm package` succeeds on Node 22 and pnpm 10.
 - [ ] Unit and DOM tests pass.
-- [ ] Chrome and Firefox manifests are MV3, request only `storage`, and match only `https://www.odoo.com/odoo*`.
+- [ ] Chrome and Firefox manifests are MV3, request only `storage`, and contain exactly two scripts matching only `https://www.odoo.com/odoo*`: isolated UI at `document_idle` and `MAIN` bridge at `document_start`.
 - [ ] Firefox `web-ext lint` passes.
 - [ ] Sensitive-data scan passes.
 - [ ] Three deterministic ZIP files, checksums, and release manifest exist.
@@ -17,6 +17,15 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Direct subscription and nested `sale.order` routes mount once.
 - [ ] Navigating to the linked contact unmounts subscription controls.
 - [ ] Browser back/forward, Odoo breadcrumbs, record next/previous, and repeated rerenders do not duplicate UI.
+
+## RPC bridge
+
+- [ ] The isolated gateway completes one versioned bridge handshake and correlates concurrent requests independently.
+- [ ] Foreign origins, sources, clients, versions, stale request IDs, and malformed responses are ignored.
+- [ ] Every model, method, field, domain, and write shape outside the documented allow-list is rejected before fetch.
+- [ ] Successful responses contain only allow-listed fields; errors contain no raw Odoo message, response body, or stack trace.
+- [ ] Bridge unavailable, timeout, expired session, denied access, incompatible endpoint/response, network, and server failure are distinct.
+- [ ] Read-only live traffic goes only to `https://www.odoo.com/web/dataset/call_kw/...`.
 
 ## Account health
 
@@ -51,3 +60,4 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Pages URLs load and store copy matches current behavior.
 - [ ] Tag, package, and both manifest versions match.
 - [ ] GitHub Release assets are permanent; enabled store submissions are recorded.
+- [ ] No tag or store submission is created until read-only checks pass in both browsers and controlled writes pass on an approved noncritical record.

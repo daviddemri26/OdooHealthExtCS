@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  CANONICAL_HEALTH_NAMES,
+  validateOdooBridgeCall,
+  type OdooBridgeCall,
+} from '../src/odoo/bridge-protocol';
+
+function call(overrides: Partial<OdooBridgeCall> = {}): OdooBridgeCall {
+  return {
+    model: 'sale.order',
+    method: 'read',
+    args: [[42], ['tag_ids']],
+    kwargs: {},
+    ...overrides,
+  };
+}
+
+describe('Odoo bridge allow-list', () => {
+  it('accepts every operation required by Health and Industry', () => {
+    const allowed: OdooBridgeCall[] = [
+      call({
+        method: 'fields_get',
+        args: [],
+        kwargs: {
+          allfields: ['tag_ids'],
+          attributes: ['type', 'relation', 'readonly', 'string'],
+        },
+      }),
+      call({ args: [[42], ['tag_ids', 'partner_id', 'subscription_state']] }),
+      call({ args: [[42], ['partner_id']] }),
+      call({ model: 'res.partner', args: [[7], ['industry_id']] }),
+      call({
+        model: 'crm.tag',
+        method: 'search_read',
+        args: [[['name', 'in', [...CANONICAL_HEALTH_NAMES]]]],
+        kwargs: { fields: ['id', 'name'], limit: 20 },
+      }),
+      call({
+        model: 'res.partner.industry',
+        method: 'search_read',
+        args: [[]],
+        kwargs: { fields: ['id', 'name'], limit: 500, order: 'name asc' },
+      }),
+      call({
+        method: 'write',
+        args: [[42], { tag_ids: [[6, 0, [1, 2, 3]]] }],
+      }),
+      call({ model: 'res.partner', method: 'write', args: [[7], { industry_id: false }] }),
+      call({ model: 'res.partner', method: 'write', args: [[7], { industry_id: 9 }] }),
+    ];
+
+    for (const operation of allowed)
+      expect(validateOdooBridgeCall(operation)).toEqual({ ok: true });
+  });
+
+  it.each([
+    call({ model: 'res.users' }),
+    call({ method: 'unlink' }),
+    call({ args: [[42], ['amount_total']] }),
+    call({ args: [[42, 43], ['tag_ids']] }),
+    call({
+      model: 'crm.tag',
+      method: 'search_read',
+      args: [[['name', 'ilike', 'Health']]],
+      kwargs: { fields: ['id', 'name'], limit: 20 },
+    }),
+    call({ method: 'write', args: [[42], { tag_ids: [[4, 99]] }] }),
+    call({ method: 'write', args: [[42], { tag_ids: [[6, 0, []]], amount_total: 0 }] }),
+    call({ model: 'res.partner', method: 'write', args: [[7], { industry_id: '9' }] }),
+  ])('rejects an operation outside the exact allow-list', (operation) => {
+    expect(validateOdooBridgeCall(operation)).toMatchObject({
+      ok: false,
+      failure: { code: 'incompatible_endpoint' },
+    });
+  });
+});

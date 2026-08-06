@@ -8,6 +8,7 @@ import {
   isRenderedSubscriptionForm,
   parseSubscriptionRoute,
 } from '../src/odoo/routes';
+import { PageContextOdooGateway } from '../src/odoo/gateway';
 import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from '../src/shared/settings';
 import type { ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
 
@@ -50,6 +51,7 @@ export default defineContentScript({
   runAt: 'document_idle',
   main(ctx) {
     const { host, container } = createExtensionHost(ROOT_ID, contentStyles);
+    const gateway = new PageContextOdooGateway();
 
     const root: Root = createRoot(container);
     let settings: ExtensionSettings = DEFAULT_SETTINGS;
@@ -59,6 +61,7 @@ export default defineContentScript({
     const render = (): void => {
       root.render(
         <ContentApp
+          gateway={gateway}
           route={getActiveRoute()}
           settings={settings}
           detectedTheme={detectOdooTheme()}
@@ -101,6 +104,7 @@ export default defineContentScript({
     void initialize();
 
     ctx.onInvalidated(() => {
+      gateway.dispose();
       observer.disconnect();
       window.clearInterval(routeInterval);
       window.clearTimeout(scheduled);

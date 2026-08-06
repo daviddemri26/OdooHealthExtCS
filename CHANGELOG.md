@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- Replaced isolated-world Odoo requests with a versioned, allow-listed `MAIN`-world bridge so Chrome and Firefox use the active authenticated page session reliably.
+- Added distinct bridge, timeout, session, permission, endpoint, network, response, and server diagnostics without forwarding raw Odoo errors.
+
+### Security
+
+- Restricted the page bridge to the exact Health and Industry models, fields, domains, and write shapes, with sanitized responses and no new extension permissions.
+
 ### Added
 
 - Initial cross-browser WXT, React, TypeScript, and Manifest V3 implementation.

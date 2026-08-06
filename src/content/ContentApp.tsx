@@ -13,11 +13,12 @@ import {
   undoIndustryChange,
   type IndustryContext,
 } from '../features/industry/service';
-import { OdooGatewayError, SameSessionOdooGateway } from '../odoo/gateway';
+import { OdooGatewayError } from '../odoo/gateway';
 import { setCompatibilityStatus } from '../shared/compatibility';
 import type {
   ExtensionSettings,
   HealthState,
+  OdooGateway,
   StatusMessage,
   SubscriptionRoute,
 } from '../shared/types';
@@ -28,6 +29,7 @@ export interface AnchorPosition {
 }
 
 interface ContentAppProps {
+  gateway: OdooGateway;
   route: SubscriptionRoute | null;
   settings: ExtensionSettings;
   detectedTheme: 'light' | 'dark';
@@ -316,12 +318,12 @@ export function IndustryDrawer({
 }
 
 export function ContentApp({
+  gateway,
   route,
   settings,
   detectedTheme,
   anchor,
 }: ContentAppProps): React.JSX.Element | null {
-  const gateway = useMemo(() => new SameSessionOdooGateway(), []);
   const [health, setHealth] = useState<HealthContext | null>(null);
   const [industry, setIndustry] = useState<IndustryContext | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
