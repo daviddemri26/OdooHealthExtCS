@@ -1,8 +1,8 @@
 # Extension icon
 
-`odoo-health.svg` is the editable master. Do not reference it from a Chromium
-manifest: Chromium extension icons must use a supported raster format, with PNG
-recommended for transparency.
+This directory contains the earlier design draft and is retained only as design provenance. The
+canonical source is `assets/brand/odoo-health-ext-cs-icon.svg`; packaging generates every shipped
+PNG under `public/icons/` from that file.
 
 The PNG files cover the standard Chromium sizes plus Firefox high-density sizes:
 
@@ -38,7 +38,7 @@ If the extension has no toolbar action, omit the `action` block.
 
 - Odoo purple: `#714B67`
 - Health green: `#21B799`
-- Background: transparent
+- Background: transparent in this archived draft; the canonical release asset uses the approved white rounded square.
 
-The circular artwork occupies 87.5% of the canvas. At 128 px, its diameter is
-112 px, following Chrome Web Store guidance for circular extension icons.
+Do not copy these draft PNGs into a release. Run `pnpm icons` and review the canonical generated
+16 px and 128 px PNGs instead.

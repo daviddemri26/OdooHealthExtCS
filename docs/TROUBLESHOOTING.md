@@ -39,3 +39,7 @@ An incompatible-endpoint status means an attempted operation no longer matches t
 ## Build or packaging failure
 
 Use Node 22 LTS and pnpm 10, run `pnpm install --frozen-lockfile`, and retry `pnpm package`. An icon failure means the approved SVG is absent or invalid. Manifest failures indicate widened permissions or URL scope. Sensitive-scan failures must be removed at the source, not excluded without security review.
+
+## Settings show “Not saved”
+
+The popup could not write the preference to browser storage. Confirm the extension is enabled, reload it from the browser's extension manager, reopen the Odoo tab, and try once more. The on-page controls continue with safe defaults, but the failed preference may not survive the next browser session. If the message repeats, report the browser/version and extension version without including Odoo record or session data.

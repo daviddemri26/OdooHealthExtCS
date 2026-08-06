@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-05
+
 ### Fixed
 
 - Replaced isolated-world Odoo requests with a versioned, allow-listed `MAIN`-world bridge so Chrome and Firefox use the active authenticated page session reliably.
@@ -25,6 +27,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Corrected Firefox positioning by measuring the visible contract text instead of its full-width heading container.
 - Left-aligned the expanded Industry picker with the compact field panel while preserving its independent width.
 - Hid the inline panel until enabled data finishes loading, then added a short fade-in instead of visible loading placeholders.
+- Hardened settings and compatibility-status deserialization, made diagnostic storage nonblocking, and reduced unnecessary Odoo SPA rerenders.
+- Added graceful popup fallbacks when browser storage is temporarily unavailable.
 
 ### Security
 
@@ -39,6 +43,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Per-feature success-toast preferences, enabled by default, with a direct “Don't show again” action in Health and Industry confirmations.
 - Deterministic packaging, privacy scanning, GitHub Actions releases, optional store submission, and GitHub Pages policies.
 - Complete English repository, support, privacy, release, QA, compatibility, troubleshooting, and store documentation.
+- Official white rounded-square icon treatment and version 1 store, policy, website, and release copy.
 
 ## [0.1.0] - 2026-08-05
 

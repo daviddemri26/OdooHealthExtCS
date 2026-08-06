@@ -102,6 +102,10 @@ input {
   opacity: 1;
 }
 
+.save-state.is-error {
+  color: #c43d4b;
+}
+
 section {
   margin-top: 12px;
 }

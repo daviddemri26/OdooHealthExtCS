@@ -19,26 +19,33 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   appearance: 'auto',
 };
 
-export function normalizeSettings(value: unknown): ExtensionSettings {
-  if (!value || typeof value !== 'object') return DEFAULT_SETTINGS;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
-  const candidate = value as Partial<ExtensionSettings>;
-  const features = candidate.features ?? DEFAULT_SETTINGS.features;
-  const successToasts = candidate.successToasts ?? DEFAULT_SETTINGS.successToasts;
+function booleanOrDefault(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+export function normalizeSettings(value: unknown): ExtensionSettings {
+  if (!isRecord(value)) return DEFAULT_SETTINGS;
+
+  const features = isRecord(value.features) ? value.features : {};
+  const successToasts = isRecord(value.successToasts) ? value.successToasts : {};
 
   return {
     schemaVersion: 2,
-    enabled: candidate.enabled ?? DEFAULT_SETTINGS.enabled,
+    enabled: booleanOrDefault(value.enabled, DEFAULT_SETTINGS.enabled),
     features: {
-      health: features.health ?? DEFAULT_SETTINGS.features.health,
-      industry: features.industry ?? DEFAULT_SETTINGS.features.industry,
+      health: booleanOrDefault(features.health, DEFAULT_SETTINGS.features.health),
+      industry: booleanOrDefault(features.industry, DEFAULT_SETTINGS.features.industry),
     },
     successToasts: {
-      health: successToasts.health ?? DEFAULT_SETTINGS.successToasts.health,
-      industry: successToasts.industry ?? DEFAULT_SETTINGS.successToasts.industry,
+      health: booleanOrDefault(successToasts.health, DEFAULT_SETTINGS.successToasts.health),
+      industry: booleanOrDefault(successToasts.industry, DEFAULT_SETTINGS.successToasts.industry),
     },
-    appearance: ['auto', 'light', 'dark'].includes(candidate.appearance ?? '')
-      ? (candidate.appearance as ExtensionSettings['appearance'])
+    appearance: ['auto', 'light', 'dark'].includes(String(value.appearance ?? ''))
+      ? (value.appearance as ExtensionSettings['appearance'])
       : DEFAULT_SETTINGS.appearance,
   };
 }

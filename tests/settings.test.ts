@@ -23,4 +23,22 @@ describe('extension settings', () => {
       appearance: 'dark',
     });
   });
+
+  it('falls back safely when stored settings contain invalid runtime values', () => {
+    expect(
+      normalizeSettings({
+        schemaVersion: 2,
+        enabled: 'yes',
+        features: { health: 1, industry: false },
+        successToasts: { health: null, industry: true },
+        appearance: 'dark',
+      }),
+    ).toEqual({
+      schemaVersion: 2,
+      enabled: true,
+      features: { health: true, industry: false },
+      successToasts: { health: true, industry: true },
+      appearance: 'dark',
+    });
+  });
 });

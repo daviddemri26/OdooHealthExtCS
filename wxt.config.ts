@@ -8,6 +8,7 @@ export default defineConfig({
     name: extensionName,
     short_name: extensionName,
     description: 'Fast account health and industry updates for Odoo Customer Success.',
+    homepage_url: 'https://daviddemri26.github.io/OdooHealthExtCS/',
     permissions: ['storage'],
     action: {
       default_title: `${extensionName} settings`,

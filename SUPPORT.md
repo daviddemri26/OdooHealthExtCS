@@ -1,6 +1,6 @@
 # Support
 
-OdooHealthExtCS is intended for authorized internal users. It runs only on `https://www.odoo.com/odoo*` and is not an Odoo server module.
+OdooHealthExtCS version 1 is intended for authorized internal users. It runs only on `https://www.odoo.com/odoo*` and is not an Odoo server module.
 
 Before requesting help:
 

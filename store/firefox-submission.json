@@ -6,7 +6,7 @@
     "en-US": "Faster account health and industry updates for authorized Odoo Customer Success users."
   },
   "description": {
-    "en-US": "Internal Odoo subscription shortcuts for account health and customer industry. Runs only on www.odoo.com/odoo*, uses the current Odoo session, and sends no data to external services. This is not an installable Odoo module or an official Odoo product."
+    "en-US": "Version 1 internal Odoo subscription shortcuts for account health and customer industry. Runs only on www.odoo.com/odoo*, uses the current Odoo session, and sends no data to external services. This is not an installable Odoo module or an official Odoo product."
   },
   "homepage": {
     "en-US": "https://daviddemri26.github.io/OdooHealthExtCS/"
@@ -21,7 +21,7 @@
   "version": {
     "license": "MIT",
     "release_notes": {
-      "en-US": "Initial release with Odoo-aligned account-health controls, a searchable inline industry dropdown, settings, safe Undo, and light/dark appearance."
+      "en-US": "Version 1 introduces Odoo-aligned account-health controls, a searchable inline industry dropdown, immediate feedback with safe rollback, configurable confirmations, safe Undo, and light/dark appearance."
     },
     "approval_notes": "Built from the attached human-readable source archive with Node 22 and pnpm 10. The web-ext static innerHTML notices originate in the generated React runtime; extension source does not use dangerouslySetInnerHTML or process untrusted HTML."
   }

@@ -62,6 +62,14 @@ function publicError(error: unknown): { message: string; code: OdooGatewayError[
   return { message: 'The extension could not complete this action.', code: 'server_error' };
 }
 
+async function recordCompatibility(ok: boolean, code: OdooGatewayError['code']): Promise<void> {
+  try {
+    await setCompatibilityStatus(ok, code);
+  } catch {
+    // Compatibility storage is diagnostic only and must never block the primary controls.
+  }
+}
+
 export function StatusBar({
   status,
   onDismiss,
@@ -530,10 +538,7 @@ export function ContentApp({
 
       await Promise.allSettled(tasks);
       if (active && tasks.length > 0) {
-        await setCompatibilityStatus(
-          compatibilityFailure === null,
-          compatibilityFailure ?? 'ready',
-        );
+        await recordCompatibility(compatibilityFailure === null, compatibilityFailure ?? 'ready');
         if (active) setReadyRecordId(recordId);
       }
     };
@@ -601,7 +606,7 @@ export function ContentApp({
                 } catch (error) {
                   const failure = publicError(error);
                   notify(createMessage('error', failure.message));
-                  await setCompatibilityStatus(false, failure.code);
+                  await recordCompatibility(false, failure.code);
                 }
               },
             },
@@ -616,7 +621,7 @@ export function ContentApp({
       setHealth(previousHealth);
       const failure = publicError(error);
       notify(createMessage('error', failure.message));
-      await setCompatibilityStatus(false, failure.code);
+      await recordCompatibility(false, failure.code);
     } finally {
       setHealthPending(false);
     }
@@ -662,7 +667,7 @@ export function ContentApp({
                 } catch (error) {
                   const failure = publicError(error);
                   notify(createMessage('error', failure.message));
-                  await setCompatibilityStatus(false, failure.code);
+                  await recordCompatibility(false, failure.code);
                 }
               },
             },
@@ -677,7 +682,7 @@ export function ContentApp({
       setIndustry(previousIndustry);
       const failure = publicError(error);
       notify(createMessage('error', failure.message));
-      await setCompatibilityStatus(false, failure.code);
+      await recordCompatibility(false, failure.code);
     } finally {
       setIndustryPending(false);
     }

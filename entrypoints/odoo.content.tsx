@@ -52,31 +52,51 @@ export default defineContentScript({
     let scheduled = 0;
 
     const render = (): void => {
-      attachPanelHost(panelHost);
+      const route = getActiveRoute();
+      if (route) attachPanelHost(panelHost);
+      else panelHost.style.display = 'none';
       root.render(
         <ContentApp
           gateway={gateway}
-          route={getActiveRoute()}
+          route={route}
           settings={settings}
           detectedTheme={detectOdooTheme()}
-          anchor={measureOrderDateAnchor()}
+          anchor={route ? measureOrderDateAnchor() : null}
           panelContainer={panelContainer}
         />,
       );
     };
 
     const scheduleRender = (): void => {
-      window.clearTimeout(scheduled);
-      scheduled = window.setTimeout(render, 90);
+      if (scheduled) return;
+      scheduled = window.setTimeout(() => {
+        scheduled = 0;
+        render();
+      }, 90);
     };
 
-    const initialize = async (): Promise<void> => {
-      settings = await getSettings();
+    const renderNow = (): void => {
+      window.clearTimeout(scheduled);
+      scheduled = 0;
       render();
     };
 
+    const initialize = async (): Promise<void> => {
+      try {
+        settings = await getSettings();
+      } catch {
+        settings = DEFAULT_SETTINGS;
+      }
+      renderNow();
+    };
+
     const observer = new MutationObserver(scheduleRender);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
 
     const routeInterval = window.setInterval(() => {
       if (window.location.href === lastHref) return;
@@ -86,7 +106,7 @@ export default defineContentScript({
 
     const unsubscribe = subscribeToSettings((nextSettings) => {
       settings = nextSettings;
-      render();
+      renderNow();
     });
 
     window.addEventListener('popstate', scheduleRender);

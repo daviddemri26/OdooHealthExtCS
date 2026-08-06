@@ -12,7 +12,7 @@ This processing occurs in the browser and between the browser and `www.odoo.com`
 
 ## Data stored
 
-Browser synchronized storage contains only versioned extension preferences: master enablement, feature enablement, and appearance. Browser local storage may contain a sanitized compatibility code and timestamp. The extension does not store Odoo records, customer data, cookies, passwords, CSRF values, session identifiers, credentials, request payload histories, or raw server stack traces.
+Browser synchronized storage contains only versioned extension preferences: master enablement, feature enablement, per-feature success-confirmation preferences, and appearance. Browser local storage may contain a sanitized compatibility code and timestamp. The extension does not store Odoo records, customer data, cookies, passwords, CSRF values, session identifiers, credentials, request payload histories, or raw server stack traces.
 
 Browser vendors may synchronize settings according to the user's own browser-account configuration. Odoo retains record changes according to Odoo's policies and the user's organization. This extension does not create a separate record database.
 

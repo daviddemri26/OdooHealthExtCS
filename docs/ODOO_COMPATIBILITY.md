@@ -2,7 +2,7 @@
 
 ## Supported baseline
 
-Version 0.1 targets the `www.odoo.com` Odoo 19.3 web client and its current `sale.order` subscription forms. Chrome/Chromium and Firefox Manifest V3 packages are built from the same source. Firefox 142 or later is required so the manifest can declare Mozilla's mandatory no-data-collection metadata.
+Version 1.0 targets the `www.odoo.com` Odoo 19.3 web client and its current `sale.order` subscription forms. Chrome/Chromium and Firefox Manifest V3 packages are built from the same source. Firefox 142 or later is required so the manifest can declare Mozilla's mandatory no-data-collection metadata.
 
 The extension relies on stable model semantics rather than copied DOM values:
 

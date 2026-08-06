@@ -71,25 +71,41 @@ export function Popup(): React.JSX.Element {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [compatibility, setCompatibility] = useState<CompatibilityStatus | null>(null);
   const [ready, setReady] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
 
   useEffect(() => {
-    void Promise.all([getSettings(), getCompatibilityStatus()]).then(([stored, status]) => {
-      setSettings(stored);
-      setCompatibility(status);
-      setReady(true);
-    });
+    let active = true;
+    void Promise.allSettled([getSettings(), getCompatibilityStatus()]).then(
+      ([settingsResult, compatibilityResult]) => {
+        if (!active) return;
+        if (settingsResult.status === 'fulfilled') setSettings(settingsResult.value);
+        if (compatibilityResult.status === 'fulfilled') {
+          setCompatibility(compatibilityResult.value);
+        }
+        setReady(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!ready) return;
-    const timer = window.setTimeout(() => {
-      void saveSettings(settings).then(() => {
-        setSaved(true);
-        window.setTimeout(() => setSaved(false), 1_200);
-      });
+    let feedbackTimer = 0;
+    setSaveState('idle');
+    const saveTimer = window.setTimeout(() => {
+      void saveSettings(settings)
+        .then(() => {
+          setSaveState('saved');
+          feedbackTimer = window.setTimeout(() => setSaveState('idle'), 1_200);
+        })
+        .catch(() => setSaveState('error'));
     }, 120);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(saveTimer);
+      window.clearTimeout(feedbackTimer);
+    };
   }, [ready, settings]);
 
   const theme = useMemo(() => {
@@ -129,7 +145,12 @@ export function Popup(): React.JSX.Element {
           <h1>OdooHealthExtCS</h1>
           <p>Customer Success shortcuts</p>
         </div>
-        <span className={`save-state${saved ? ' is-visible' : ''}`}>Saved</span>
+        <span
+          className={`save-state${saveState !== 'idle' ? ' is-visible' : ''}${saveState === 'error' ? ' is-error' : ''}`}
+          role={saveState === 'error' ? 'alert' : undefined}
+        >
+          {saveState === 'error' ? 'Not saved' : 'Saved'}
+        </span>
       </header>
 
       <section className="master-section">

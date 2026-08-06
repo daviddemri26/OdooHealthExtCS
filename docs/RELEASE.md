@@ -13,9 +13,9 @@
 2. Confirm the approved SVG exists at `assets/brand/odoo-health-ext-cs-icon.svg`.
 3. Run the QA checklist, including controlled writes on a noncritical record.
 4. Confirm `main` is clean and synchronized with `origin/main`.
-5. Run `pnpm release -- patch`, `minor`, or `major`.
+5. For an already prepared version such as the first `1.0.0`, run `pnpm release -- current`. For later releases, run `pnpm release -- patch`, `minor`, or `major`.
 
-The release script validates the existing version, increments it, updates the changelog, refreshes the lockfile, runs `pnpm package`, commits, creates an annotated `vX.Y.Z` tag, and pushes `main` and the tag.
+The release script validates the existing version, changelog, clean branch, remote synchronization, and absence of an existing tag. `current` packages and tags the version already committed on `main`. The semantic increment modes also update the version, changelog, and lockfile, then commit those release files. Every mode creates an annotated `vX.Y.Z` tag and pushes it.
 
 ## Automated tag flow
 

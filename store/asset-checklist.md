@@ -22,5 +22,5 @@
 - [ ] Chrome screenshots meet current dimensions and count requirements.
 - [ ] Firefox screenshots meet current dimensions and count requirements.
 - [ ] Promotional tiles are created only if the store requests them.
-- [ ] Final purple O/green cross icon is reviewed at 16, 32, 48, 96, 128, 256, and 512 px.
+- [ ] Final purple O/green cross icon has a pure white softly rounded square and is reviewed at 16, 32, 48, 96, 128, 256, and 512 px.
 - [ ] Text remains readable without claiming official Odoo affiliation.

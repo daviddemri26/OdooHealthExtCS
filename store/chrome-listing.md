@@ -10,13 +10,13 @@ Faster account health and customer industry updates for authorized Odoo Customer
 
 ## Full description
 
-OdooHealthExtCS adds two focused productivity controls to Odoo subscription records for authorized internal Customer Success users.
+OdooHealthExtCS version 1 adds two focused productivity controls to Odoo subscription records for authorized internal Customer Success users.
 
 Set Account health to High, Medium, or Low from a compact Odoo-style field placed directly above Order Date. The extension identifies the canonical Odoo tags, preserves unrelated tags, removes duplicate health values on the next selection, and lets you clear the active value.
 
 Click the Industry value directly above Health to open a compact searchable dropdown and update the exact linked customer without navigating away. Clear the field with No industry when appropriate.
 
-Smooth light and dark interfaces explain the current value and show success, warning, or error feedback. Successful writes include a seven-second Undo action that first confirms the record has not changed elsewhere. Users may hide Health and Industry success confirmations independently from Settings or directly from the confirmation itself.
+The interface updates immediately, rolls back visibly if Odoo rejects an action, and works in Odoo light and dark modes. Clear success, warning, and error feedback is shown in a compact status bar. Successful writes include a seven-second Undo action that first confirms the record has not changed elsewhere. Users may hide Health and Industry success confirmations independently from Settings or directly from the confirmation itself.
 
 The popup lets each user enable or disable the extension, each feature, and Auto/Light/Dark appearance.
 
@@ -32,12 +32,12 @@ Make required account-health and customer-industry maintenance faster and safer 
 - Preservation of unrelated Odoo tags and safe duplicate cleanup.
 - Searchable inline industry dropdown using the subscription's exact customer.
 - No industry clearing option and current-value highlighting.
-- Keyboard navigation, light/dark appearance, status feedback, and safe Undo.
+- Keyboard navigation, optimistic updates, light/dark appearance, status feedback, and safe Undo.
 - Per-feature controls and sanitized compatibility status.
 
 ## Permission justification
 
-`storage`: saves only extension enablement, feature enablement, appearance preference, and a sanitized compatibility code/timestamp. It does not store Odoo records or session data.
+`storage`: saves only extension enablement, feature enablement, per-feature success-confirmation preferences, appearance preference, and a sanitized compatibility code/timestamp. It does not store Odoo records or session data.
 
 Site access to `https://www.odoo.com/odoo*`: required to display the controls on Odoo subscription forms and perform user-requested same-origin reads/writes. The extension does not run on other Odoo pages, other Odoo hosts, or other websites.
 

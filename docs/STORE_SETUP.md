@@ -10,7 +10,7 @@ After enabling GitHub Pages with the Actions source:
 
 ## Chrome Web Store
 
-1. Create an unlisted item and upload the first Chrome ZIP manually.
+1. Create an unlisted item and upload the version 1.0.0 Chrome ZIP manually.
 2. Complete the listing and privacy tabs from `store/chrome-listing.md` and publish the initial version manually.
 3. Enable Chrome Web Store API v2 for a dedicated Google project.
 4. Add a dedicated service account to the Chrome publisher account.
@@ -24,7 +24,7 @@ References: [Chrome Web Store API v2](https://developer.chrome.com/docs/webstore
 
 ## Firefox Add-ons
 
-1. Create the listed AMO listing using the permanent ID `odoo-health-ext-cs@daviddemri26.github.io` already declared in the Firefox manifest.
+1. Create the listed AMO listing using the permanent ID `odoo-health-ext-cs@daviddemri26.github.io` already declared in the Firefox manifest and upload version 1.0.0 through the documented first-release flow.
 2. Complete the listing from `store/firefox-listing.md` and the required no-data-collection declaration. The versioned `store/firefox-submission.json` supplies the initial metadata to `web-ext sign`.
 3. Create dedicated AMO JWT submission credentials.
 4. In GitHub environment `firefox-amo`, add `AMO_API_KEY` and `AMO_API_SECRET`.

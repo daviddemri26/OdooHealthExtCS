@@ -10,6 +10,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Firefox `web-ext lint` passes.
 - [ ] Sensitive-data scan passes.
 - [ ] Three deterministic ZIP files, checksums, and release manifest exist.
+- [ ] Generated icons have a pure white softly rounded square, remain crisp at 16 px, and match the canonical SVG.
 
 ## Routing and lifecycle
 
@@ -62,6 +63,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] The panel scrolls with the Odoo form and stays below sticky action bars, user-preference dialogs, email composers, and other native modals.
 - [ ] Industry hover changes only the link color and never adds an underline.
 - [ ] Chrome shows no unused popup area and neither browser requires scrolling to read the popup footer.
+- [ ] Invalid or unavailable browser storage falls back safely; the popup remains usable and reports a failed preference save without crashing.
 - [ ] Success and error status messages use a colored outline, a prominent primary line, and dismiss automatically; Health confirmation explains the delayed native Tags-widget refresh.
 - [ ] Hovering a status message pauses its dismissal timer; leaving resumes from the remaining time.
 - [ ] Each feature's success toast is enabled by default, can be disabled in Settings, and can disable itself through “Don't show again” without suppressing errors or warnings.

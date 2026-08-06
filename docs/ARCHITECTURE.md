@@ -12,7 +12,7 @@ A separate script runs at `document_start` with `world: "MAIN"`. It shares the O
 
 `src/odoo/routes.ts` accepts only the exact `www.odoo.com` hostname and `/odoo` path prefix. It supports direct `/odoo/subscriptions/{id}` routes and nested routes whose active model segment is `sale.order/{id}`. A nested route ending in another model, such as `res.partner/{id}`, unmounts the subscription features.
 
-Odoo is a single-page application. The entrypoint watches DOM changes, URL changes, history events, viewport changes, and theme changes, then schedules an idempotent render. Feature state resets when the active sale order changes. The UI mounts only when a rendered Odoo form includes `partner_id` and either a subscription route or `subscription_state`.
+Odoo is a single-page application. The entrypoint watches relevant DOM changes, URL changes, history events, viewport changes, and theme changes, then coalesces bursts into one idempotent render. Attribute observation is limited to class and style changes so unrelated Odoo mutations do not restart the timer or cause continuous layout work. Feature state resets when the active sale order changes. The UI mounts only when a rendered Odoo form includes `partner_id` and either a subscription route or `subscription_state`.
 
 The visual controls locate the visible native `[name="date_order"]` widget and contract title on each render. The preferred title anchor is `[name="client_order_ref"]`; the form's `h1` is a Firefox-tolerant fallback when Odoo omits that wrapper. The layout reader accepts both Odoo's paired `.o_cell` structure and flatter `sale.order` markup, using nearby labels and links only for typography rather than as hard eligibility requirements. The compact framed panel attaches to the top edge of the form sheet, begins 48 pixels after the rendered title, shrinks to its current content, and caps its right edge before the native `subscription_state` badge. Industry appears first and Health second. This keeps long industry names away from the status badge while still following chatter, zoom, responsive width, native scrolling, and SPA rerenders. If the essential anchors are absent or leave less than 260 pixels of safe width, the controls do not fall back to an unrelated position.
 
@@ -49,7 +49,7 @@ The industry service validates `res.partner.industry_id`, reads `sale.order.part
 
 ## Settings and compatibility
 
-`ExtensionSettings` has schema version 2 and stores only the master switch, two feature switches, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled. Version 1 settings migrate automatically without changing existing feature or appearance choices. A sanitized compatibility code and timestamp are stored locally. Migrations normalize absent or unknown settings to safe defaults.
+`ExtensionSettings` has schema version 2 and stores only the master switch, two feature switches, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled. Version 1 settings migrate automatically without changing existing feature or appearance choices. A sanitized compatibility code and timestamp are stored locally. Runtime validation rejects malformed types and unknown compatibility codes. Storage failures fall back safely in the UI, and diagnostic compatibility storage can never block Health or Industry controls.
 
 ## Status and Undo
 

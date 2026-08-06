@@ -1,8 +1,8 @@
 {
   "name": "odoo-health-ext-cs",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Internal browser productivity tools for Odoo Customer Success.",
+  "description": "Fast, safe account health and industry updates for Odoo Customer Success.",
   "type": "module",
   "packageManager": "pnpm@10.9.0",
   "engines": {
