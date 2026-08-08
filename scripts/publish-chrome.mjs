@@ -1,19 +1,23 @@
 import { appendFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { loadReleaseContext } from './release-state.mjs';
+
 const projectRoot = path.resolve(import.meta.dirname, '..');
-const required = ['CWS_ACCESS_TOKEN', 'CWS_PUBLISHER_ID', 'CWS_EXTENSION_ID'];
+const required = ['CWS_ACCESS_TOKEN', 'CWS_PUBLISHER_ID'];
 for (const name of required) {
   if (!process.env[name]) throw new Error(`Missing required environment variable: ${name}`);
 }
 
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8'));
+const { state } = await loadReleaseContext();
+const extensionId = state.stores.chrome.itemId;
 const packagePath = path.join(
   projectRoot,
   'artifacts',
   `OdooHealthExtCS-v${packageJson.version}-chrome.zip`,
 );
-const base = `https://chromewebstore.googleapis.com/v2/publishers/${process.env.CWS_PUBLISHER_ID}/items/${process.env.CWS_EXTENSION_ID}`;
+const base = `https://chromewebstore.googleapis.com/v2/publishers/${process.env.CWS_PUBLISHER_ID}/items/${extensionId}`;
 const headers = { Authorization: `Bearer ${process.env.CWS_ACCESS_TOKEN}` };
 
 const current = await fetch(`${base}:fetchStatus`, { headers });
@@ -48,7 +52,7 @@ const publish = await fetch(`${base}:publish`, {
 if (!publish.ok) throw new Error(`Chrome publish request failed with HTTP ${publish.status}.`);
 const published = await publish.json();
 
-const itemUrl = `https://chromewebstore.google.com/detail/${process.env.CWS_EXTENSION_ID}`;
+const itemUrl = state.stores.chrome.listingUrl;
 if (process.env.GITHUB_STEP_SUMMARY) {
   await appendFile(
     process.env.GITHUB_STEP_SUMMARY,

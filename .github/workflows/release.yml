@@ -32,6 +32,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm package
       - run: pnpm verify:release-version
+      - run: pnpm verify:release-state -- release "$GITHUB_REF_NAME"
       - id: version
         run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@v4
@@ -78,12 +79,11 @@ jobs:
         with:
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/chromewebstore
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.CWS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
       - env:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
-          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
         run: pnpm exec node scripts/publish-chrome.mjs
       - run: echo "Chrome package submitted from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
 

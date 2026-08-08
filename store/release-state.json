@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "initialVersion": "1.0.0",
+  "policy": "wait-for-both-initial-publications",
+  "stores": {
+    "chrome": {
+      "itemId": "hckohbbpednejhdjbiidmodchebpgpbn",
+      "listingUrl": "https://chromewebstore.google.com/detail/hckohbbpednejhdjbiidmodchebpgpbn/",
+      "status": "pending-review"
+    },
+    "firefox": {
+      "addonId": "odoo-health-ext-cs@daviddemri26.github.io",
+      "listingUrl": "https://addons.mozilla.org/en-US/firefox/addon/odoohealthextcs/",
+      "status": "pending-review"
+    }
+  }
+}

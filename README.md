@@ -49,11 +49,13 @@ See [Architecture](docs/ARCHITECTURE.md), [Odoo compatibility](docs/ODOO_COMPATI
 
 ```bash
 pnpm package
-pnpm release -- current  # tag the prepared 1.0.0 version
-pnpm release -- patch    # later patch / minor / major releases
+pnpm release:status
+pnpm release -- patch    # only after both initial store versions are published
 ```
 
-`pnpm package` validates, tests, builds, lints, scans, and creates browser and source archives plus checksums in `artifacts/`. `pnpm release` requires a clean, synchronized `main`. The `current` mode validates and tags an already prepared version; `patch`, `minor`, and `major` also update the version, lockfile, and changelog before packaging, committing, and tagging.
+`pnpm package` validates, tests, builds, lints, scans, and creates browser and source archives plus checksums in `artifacts/`. While the manually submitted 1.0.0 packages are under review, normal code changes continue under the unchanged 1.0.0 development version and are recorded in `CHANGELOG.md` under `Unreleased`.
+
+The public store IDs and initial-review statuses live in `store/release-state.json`. Until both statuses are `published`, packaging remains available but version increments, release tags, and store submissions are blocked. After both first publications, update those two statuses in a reviewed commit and use `patch`, `minor`, or `major` to promote the accumulated Unreleased changes into the next version. `pnpm release` requires a clean, synchronized `main`.
 
 Every push and pull request produces short-lived GitHub Actions packages. A `vX.Y.Z` tag creates a permanent GitHub Release and submits to each enabled store. Store jobs remain safely skipped until their protected environments are configured. Follow the [release runbook](docs/RELEASE.md).
 

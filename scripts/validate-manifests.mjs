@@ -7,6 +7,9 @@ const targets = [
   { browser: 'firefox', directory: '.output/firefox-mv3' },
 ];
 const expectedMatch = 'https://www.odoo.com/odoo*';
+const releaseState = JSON.parse(
+  await readFile(path.join(projectRoot, 'store/release-state.json'), 'utf8'),
+);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -59,7 +62,7 @@ for (const target of targets) {
 
   if (target.browser === 'firefox') {
     assert(
-      manifest.browser_specific_settings?.gecko?.id === 'odoo-health-ext-cs@daviddemri26.github.io',
+      manifest.browser_specific_settings?.gecko?.id === releaseState.stores.firefox.addonId,
       'firefox: a stable extension ID is required.',
     );
     assert(

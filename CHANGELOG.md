@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- Kept development builds on version 1.0.0 while the initial Chrome and Firefox submissions are under review.
+- Added a versioned two-store publication gate that blocks version increments, release tags, and automated submissions until both initial listings are marked published.
+- Moved the public Chrome item ID into the repository release state while keeping publication authorization in protected GitHub environments.
+- Required future releases to promote documented Unreleased changes into a new patch, minor, or major version.
+
 ## [1.0.0] - 2026-08-05
 
 ### Fixed
