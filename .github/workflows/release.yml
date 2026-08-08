@@ -35,7 +35,7 @@ jobs:
       - run: pnpm package
       - run: pnpm verify:release-version
       - id: release_state
-        run: pnpm verify:release-state -- release "$GITHUB_REF_NAME"
+        run: node scripts/verify-release-state.mjs release "$GITHUB_REF_NAME"
       - id: version
         run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@v4
