@@ -333,12 +333,17 @@ section h2 {
 }
 
 footer {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
   gap: 10px;
   margin-top: 10px;
   color: var(--muted);
   font-size: 9px;
+}
+
+footer span:nth-child(2) {
+  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

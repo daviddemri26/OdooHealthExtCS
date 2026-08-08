@@ -4,6 +4,41 @@ import { describe, expect, it, vi } from 'vitest';
 import { HealthControl, IndustryField, StatusBar } from '../src/content/ContentApp';
 
 describe('content controls', () => {
+  it('visually attenuates unset Health and Industry values', () => {
+    const view = render(
+      <HealthControl
+        context={{
+          tags: { high: 1, medium: 2, low: 3 },
+          snapshot: { tagIds: [], state: null, duplicate: false },
+        }}
+        loading={false}
+        pending={false}
+        error={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(view.container.querySelector('.health-current')).toHaveClass('is-not-set');
+
+    view.rerender(
+      <IndustryField
+        context={{
+          partnerId: 81,
+          partnerName: 'Demo Customer',
+          currentIndustryId: null,
+          industries: [{ id: 2, name: 'Education' }],
+        }}
+        open={false}
+        loading={false}
+        pending={false}
+        error={null}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Not set' })).toHaveClass('is-not-set');
+    view.unmount();
+  });
+
   it('communicates active health in text and clicking it requests a clear-capable selection', () => {
     const onSelect = vi.fn();
     render(

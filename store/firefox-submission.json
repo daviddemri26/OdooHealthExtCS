@@ -6,7 +6,7 @@
     "en-US": "Faster account health and industry updates for authorized Odoo Customer Success users."
   },
   "description": {
-    "en-US": "Version 1 internal Odoo subscription shortcuts for account health and customer industry. Runs only on www.odoo.com/odoo*, uses the current Odoo session, and sends no data to external services. This is not an installable Odoo module or an official Odoo product."
+    "en-US": "Version 1 internal Odoo subscription shortcuts for account health and customer industry, shown only while the subscription is In Progress. Runs only on www.odoo.com/odoo*, uses the current Odoo session, and sends no data to external services. This is not an installable Odoo module or an official Odoo product. © DDEM"
   },
   "homepage": {
     "en-US": "https://daviddemri26.github.io/OdooHealthExtCS/"

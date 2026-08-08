@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   findContractNumberAnchor,
   findOrderDateAnchor,
+  hasInProgressSubscriptionBadge,
   isAllowedOdooLocation,
   isRenderedSubscriptionForm,
   parseSubscriptionRoute,
@@ -51,6 +52,20 @@ describe('Odoo route eligibility', () => {
     document.querySelector('[name="subscription_state"]')?.remove();
     expect(isRenderedSubscriptionForm('/odoo/sale.order/42')).toBe(false);
     expect(isRenderedSubscriptionForm('/odoo/subscriptions/42')).toBe(true);
+  });
+
+  it('accepts only an exact In Progress subscription badge', () => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="subscription_state"><span class="badge"> In   Progress </span></div>
+      </div>`;
+    expect(hasInProgressSubscriptionBadge()).toBe(true);
+
+    document.querySelector('.badge')!.textContent = 'Quotation Sent';
+    expect(hasInProgressSubscriptionBadge()).toBe(false);
+
+    document.querySelector('.badge')!.textContent = 'Not In Progress';
+    expect(hasInProgressSubscriptionBadge()).toBe(false);
   });
 
   it('finds the native Order Date field used as the visual anchor', () => {

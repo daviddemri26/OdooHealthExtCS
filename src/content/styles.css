@@ -92,6 +92,11 @@ button {
   text-overflow: ellipsis;
 }
 
+.health-current.is-not-set,
+.industry-trigger.is-not-set {
+  opacity: 0.5;
+}
+
 .health-options {
   display: flex;
   align-items: center;

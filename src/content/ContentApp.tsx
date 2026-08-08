@@ -238,7 +238,9 @@ export function HealthControl({
             );
           })}
         </div>
-        <span className="health-current">
+        <span
+          className={`health-current${!loading && !error && currentLabel === 'Not set' ? ' is-not-set' : ''}`}
+        >
           {loading ? 'Loading…' : error ? 'Unavailable' : currentLabel}
         </span>
       </div>
@@ -359,7 +361,7 @@ export function IndustryField({
         <button
           ref={triggerRef}
           type="button"
-          className="industry-trigger"
+          className={`industry-trigger${!loading && !error && currentName === 'Not set' ? ' is-not-set' : ''}`}
           aria-expanded={open}
           aria-controls="odoo-health-industry-picker"
           disabled={loading || Boolean(error)}

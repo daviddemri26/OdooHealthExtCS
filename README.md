@@ -2,7 +2,7 @@
 
 OdooHealthExtCS is the internal browser extension for the Odoo Customer Success team in San Francisco. Version 1 adds focused, production-ready shortcuts to Odoo subscription records without installing an Odoo module or changing the Odoo server.
 
-The extension runs only on `https://www.odoo.com/odoo*`, uses the user's existing authenticated session, and sends no Odoo data to external services.
+The extension runs only on `https://www.odoo.com/odoo*`, shows its record controls only when the visible subscription badge is **In Progress**, uses the user's existing authenticated session, and sends no Odoo data to external services.
 
 ## Features
 
@@ -67,3 +67,5 @@ Every push and pull request produces short-lived GitHub Actions packages. A `vX.
 - [Contributing](CONTRIBUTING.md)
 
 OdooHealthExtCS is an independent internal productivity extension. It is not an installable Odoo module and is not an official Odoo product.
+
+© DDEM

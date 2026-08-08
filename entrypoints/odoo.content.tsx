@@ -3,7 +3,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { ContentApp } from '../src/content/ContentApp';
 import { attachPanelHost, createExtensionHost } from '../src/content/host';
 import contentStyles from '../src/content/styles.css?inline';
-import { isRenderedSubscriptionForm, parseSubscriptionRoute } from '../src/odoo/routes';
+import {
+  hasInProgressSubscriptionBadge,
+  isRenderedSubscriptionForm,
+  parseSubscriptionRoute,
+} from '../src/odoo/routes';
 import { PageContextOdooGateway } from '../src/odoo/gateway';
 import { measureOrderDateAnchor } from '../src/odoo/layout';
 import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from '../src/shared/settings';
@@ -32,7 +36,9 @@ function detectOdooTheme(): 'light' | 'dark' {
 
 function getActiveRoute(): SubscriptionRoute | null {
   const route = parseSubscriptionRoute(window.location);
-  if (!route || !isRenderedSubscriptionForm(route.pathname)) return null;
+  if (!route || !isRenderedSubscriptionForm(route.pathname) || !hasInProgressSubscriptionBadge()) {
+    return null;
+  }
   return route;
 }
 
@@ -95,6 +101,7 @@ export default defineContentScript({
       childList: true,
       subtree: true,
       attributes: true,
+      characterData: true,
       attributeFilter: ['class', 'style'],
     });
 

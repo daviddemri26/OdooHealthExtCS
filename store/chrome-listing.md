@@ -10,7 +10,7 @@ Faster account health and customer industry updates for authorized Odoo Customer
 
 ## Full description
 
-OdooHealthExtCS version 1 adds two focused productivity controls to Odoo subscription records for authorized internal Customer Success users.
+OdooHealthExtCS version 1 adds two focused productivity controls to In Progress Odoo subscription records for authorized internal Customer Success users. The controls stay hidden on quotations, closed subscriptions, and every other status.
 
 Set Account health to High, Medium, or Low from a compact Odoo-style field placed directly above Order Date. The extension identifies the canonical Odoo tags, preserves unrelated tags, removes duplicate health values on the next selection, and lets you clear the active value.
 
@@ -21,6 +21,8 @@ The interface updates immediately, rolls back visibly if Odoo rejects an action,
 The popup lets each user enable or disable the extension, each feature, and Auto/Light/Dark appearance.
 
 This is an internal productivity browser extension, not an installable Odoo module and not an official Odoo product. It runs only on `https://www.odoo.com/odoo*`, uses the user's current authenticated Odoo session, and sends no Odoo page data to external services.
+
+© DDEM
 
 ## Single purpose
 

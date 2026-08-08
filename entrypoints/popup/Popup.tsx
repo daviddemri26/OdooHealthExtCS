@@ -237,6 +237,7 @@ export function Popup(): React.JSX.Element {
 
       <footer>
         <span>Version {version}</span>
+        <span>© DDEM</span>
         <span>Runs only on www.odoo.com/odoo*</span>
       </footer>
     </main>

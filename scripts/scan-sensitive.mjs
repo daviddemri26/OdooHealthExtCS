@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 import fg from 'fast-glob';
@@ -43,6 +44,13 @@ const prohibited = [
   { label: 'known production record identifier', pattern: /6067287|19622939|7529333/ },
 ];
 
+const approvedRasterDigests = new Map([
+  [
+    'assets/brand/store-capture-chrome.jpg',
+    '748f6197e5420fb3de49e6597ca83419352aa9a0630afdd6c9b5777a31c24ba5',
+  ],
+]);
+
 const files = await fg(
   scanRoots.map((root) => `${root}/**/*`),
   {
@@ -56,11 +64,17 @@ const files = await fg(
 const failures = [];
 for (const relativePath of files) {
   if (/\.(?:jpe?g|png|webp)$/i.test(relativePath)) {
-    if (
-      !/^(?:icons|public\/icons|\.output\/(?:chrome|firefox)-mv3\/icons)\/icon-\d+\.png$/.test(
+    const isGeneratedIcon =
+      /^(?:icons|public\/icons|\.output\/(?:chrome|firefox)-mv3\/icons)\/icon-\d+\.png$/.test(
         relativePath,
-      )
-    ) {
+      );
+    const approvedDigest = approvedRasterDigests.get(relativePath);
+    const actualDigest = approvedDigest
+      ? createHash('sha256')
+          .update(await readFile(path.join(projectRoot, relativePath)))
+          .digest('hex')
+      : undefined;
+    if (!isGeneratedIcon && actualDigest !== approvedDigest) {
       failures.push(`${relativePath}: unapproved raster image`);
     }
     continue;

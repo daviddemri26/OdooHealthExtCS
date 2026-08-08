@@ -51,6 +51,21 @@ export function isRenderedSubscriptionForm(pathname: string, root: ParentNode = 
   );
 }
 
+function normalizeStatusLabel(value: string | null | undefined): string {
+  return value?.replace(/\s+/g, ' ').trim().toLocaleLowerCase() ?? '';
+}
+
+export function hasInProgressSubscriptionBadge(root: ParentNode = document): boolean {
+  const fields = Array.from(
+    root.querySelectorAll<HTMLElement>('.o_form_view [name="subscription_state"]'),
+  );
+  return fields.some((field) => {
+    const badges = Array.from(field.querySelectorAll<HTMLElement>('.badge'));
+    const labels = badges.length > 0 ? badges : [field];
+    return labels.some((label) => normalizeStatusLabel(label.textContent) === 'in progress');
+  });
+}
+
 export function findOrderDateAnchor(root: ParentNode = document): HTMLElement | null {
   const candidates = Array.from(
     root.querySelectorAll<HTMLElement>('.o_form_view [name="date_order"]'),

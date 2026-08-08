@@ -6,7 +6,7 @@ OdooHealthExtCS is an internal browser productivity extension for authorized Odo
 
 ## Data processed
 
-When an authorized user opens a matching Odoo subscription page and enables a feature, the extension reads only the fields needed to show account health and the linked customer's industry. It processes tag identifiers and names, the subscription's linked partner identifier and display name, the current industry, and the available industry choices. A narrowly allow-listed page bridge sends user-requested operations back to Odoo through the current authenticated same-origin session. The bridge rejects unrecognized models, methods, fields, searches, and write shapes before contacting Odoo.
+When an authorized user opens a matching Odoo subscription page whose visible status badge is **In Progress** and enables a feature, the extension reads only the fields needed to show account health and the linked customer's industry. It processes tag identifiers and names, the subscription's linked partner identifier and display name, the current industry, and the available industry choices. A narrowly allow-listed page bridge sends user-requested operations back to Odoo through the current authenticated same-origin session. The bridge rejects unrecognized models, methods, fields, searches, and write shapes before contacting Odoo.
 
 This processing occurs in the browser and between the browser and `www.odoo.com`. The extension does not transmit Odoo page data to the developer, analytics providers, advertising networks, or other external services.
 
@@ -39,3 +39,5 @@ The extension is a workplace tool and is not directed to children. Authorized us
 ## Changes and contact
 
 Material changes will be documented in the repository and reflected on the public policy page. For privacy questions, use the support process in [SUPPORT.md](SUPPORT.md) and do not include customer or session data.
+
+© DDEM
