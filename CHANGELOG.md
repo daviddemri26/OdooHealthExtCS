@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-08
+
 ### Changed
 
 - Added a live connected-user indicator to the dedicated Odoo Connection page without persisting the name or login or requesting any new browser permission.
