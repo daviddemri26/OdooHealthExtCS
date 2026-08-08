@@ -35,7 +35,7 @@ if (currentStatus.takenDown || currentStatus.warned) {
 }
 
 const upload = await fetch(
-  `https://chromewebstore.googleapis.com/upload/v2/publishers/${process.env.CWS_PUBLISHER_ID}/items/${process.env.CWS_EXTENSION_ID}:upload`,
+  `https://chromewebstore.googleapis.com/upload/v2/publishers/${process.env.CWS_PUBLISHER_ID}/items/${extensionId}:upload`,
   {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/zip' },
