@@ -233,13 +233,19 @@ export function Popup(): React.JSX.Element {
           Uses only your current Odoo session. No analytics, external services, or customer-data
           storage.
         </p>
+        <div className="privacy-meta">
+          <span>Version {version}</span>
+          <span>© DDEM</span>
+          <span>Runs only on www.odoo.com/odoo*</span>
+          <a
+            href="https://daviddemri26.github.io/OdooHealthExtCS/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Visit the OdooHealthExtCS website
+          </a>
+        </div>
       </aside>
-
-      <footer>
-        <span>Version {version}</span>
-        <span>© DDEM</span>
-        <span>Runs only on www.odoo.com/odoo*</span>
-      </footer>
     </main>
   );
 }

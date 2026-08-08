@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- Consolidated version, copyright, Odoo scope, and product website details inside the popup's Private by design card.
 - Limited the inline Health and Industry controls to subscription forms whose visible status badge reads exactly In Progress.
 - Attenuated unset Health and Industry values to make incomplete account data easier to recognize.
 - Standardized the official extension icon across the public site and added discreet © DDEM attribution to the popup, public pages, documentation, and store copy.
