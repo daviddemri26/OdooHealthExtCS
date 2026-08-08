@@ -24,7 +24,7 @@ Thank you for improving OdooHealthExtCS. Keep each change small, reviewable, and
 7. Do not add analytics, tracking, external data processors, or remote executable code.
 8. Use synthetic fixtures. Never commit customer screenshots, page captures, names, emails, record IDs, or production responses.
 9. Preserve keyboard access, visible text labels, light/dark modes, and reduced-motion support.
-10. While `store/release-state.json` reports either initial listing as pending, keep `package.json` at 1.0.0 and document completed work under `CHANGELOG.md` → `Unreleased`. Do not create a release tag.
+10. While `store/release-state.json` reports that neither initial listing is published, keep `package.json` at 1.0.0 and document completed work under `CHANGELOG.md` → `Unreleased`. Do not create a release tag. A store whose own initial status is not `published` must remain excluded from automated updates.
 
 ## Commits and pull requests
 

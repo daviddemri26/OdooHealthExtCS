@@ -5,16 +5,17 @@ import {
   assertDevelopmentVersion,
   assertReleaseTag,
   assertReleaseUnlocked,
+  anyStoreCanReceiveUpdates,
   compareVersions,
-  initialPublicationComplete,
+  storeCanReceiveUpdates,
   validateReleaseState,
 } from '../scripts/release-state.mjs';
 
 function releaseState(chromeStatus, firefoxStatus) {
   return validateReleaseState({
-    schemaVersion: 1,
+    schemaVersion: 2,
     initialVersion: '1.0.0',
-    policy: 'wait-for-both-initial-publications',
+    policy: 'independent-store-publications',
     stores: {
       chrome: {
         itemId: 'hckohbbpednejhdjbiidmodchebpgpbn',
@@ -30,10 +31,10 @@ function releaseState(chromeStatus, firefoxStatus) {
   });
 }
 
-test('keeps the development version frozen while either initial review is pending', () => {
-  const state = releaseState('pending-review', 'published');
+test('keeps the development version frozen while no initial store is published', () => {
+  const state = releaseState('ready-to-publish', 'pending-review');
 
-  assert.equal(initialPublicationComplete(state), false);
+  assert.equal(anyStoreCanReceiveUpdates(state), false);
   assert.doesNotThrow(() => assertDevelopmentVersion({ packageJson: { version: '1.0.0' }, state }));
   assert.throws(
     () => assertDevelopmentVersion({ packageJson: { version: '1.0.1' }, state }),
@@ -45,10 +46,12 @@ test('keeps the development version frozen while either initial review is pendin
   );
 });
 
-test('allows only a newer matching tag after both initial publications', () => {
-  const state = releaseState('published', 'published');
+test('allows a newer matching tag when Chrome alone is published', () => {
+  const state = releaseState('published', 'pending-review');
 
-  assert.equal(initialPublicationComplete(state), true);
+  assert.equal(anyStoreCanReceiveUpdates(state), true);
+  assert.equal(storeCanReceiveUpdates(state, 'chrome'), true);
+  assert.equal(storeCanReceiveUpdates(state, 'firefox'), false);
   assert.doesNotThrow(() =>
     assertReleaseTag({ packageJson: { version: '1.0.1' }, state }, 'v1.0.1'),
   );

@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 25
     outputs:
       version: ${{ steps.version.outputs.version }}
+      chrome_ready: ${{ steps.release_state.outputs.chrome_ready }}
+      firefox_ready: ${{ steps.release_state.outputs.firefox_ready }}
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -32,7 +34,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm package
       - run: pnpm verify:release-version
-      - run: pnpm verify:release-state -- release "$GITHUB_REF_NAME"
+      - id: release_state
+        run: pnpm verify:release-state -- release "$GITHUB_REF_NAME"
       - id: version
         run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@v4
@@ -55,7 +58,7 @@ jobs:
 
   chrome:
     needs: build
-    if: ${{ vars.CHROME_PUBLISH_ENABLED == 'true' }}
+    if: ${{ needs.build.outputs.chrome_ready == 'true' && vars.CHROME_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: chrome-store
@@ -89,7 +92,7 @@ jobs:
 
   firefox:
     needs: build
-    if: ${{ vars.FIREFOX_PUBLISH_ENABLED == 'true' }}
+    if: ${{ needs.build.outputs.firefox_ready == 'true' && vars.FIREFOX_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: firefox-amo
@@ -134,9 +137,9 @@ jobs:
 
   stores-disabled:
     needs: build
-    if: ${{ vars.CHROME_PUBLISH_ENABLED != 'true' || vars.FIREFOX_PUBLISH_ENABLED != 'true' }}
+    if: ${{ needs.build.outputs.chrome_ready != 'true' || vars.CHROME_PUBLISH_ENABLED != 'true' || needs.build.outputs.firefox_ready != 'true' || vars.FIREFOX_PUBLISH_ENABLED != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - run: |
           echo "GitHub Release completed." >> "$GITHUB_STEP_SUMMARY"
-          echo "Any store whose publish variable is not true was intentionally skipped." >> "$GITHUB_STEP_SUMMARY"
+          echo "A store is skipped until its initial version is published and its publish variable is true." >> "$GITHUB_STEP_SUMMARY"

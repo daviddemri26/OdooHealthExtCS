@@ -18,7 +18,8 @@ The public Chrome item ID is versioned in `store/release-state.json`. It is not 
 4. Add a dedicated service account to the Chrome publisher account.
 5. Configure a Google Workload Identity Pool/provider that trusts this repository and tag workflow. Restrict subject conditions to the repository and protected environment.
 6. In GitHub environment `chrome-store`, add configuration variables `GCP_WORKLOAD_IDENTITY_PROVIDER`, `CWS_SERVICE_ACCOUNT`, and `CWS_PUBLISHER_ID`. These values identify the trust provider, service account, and publisher; the authorization comes from the Workload Identity binding and the protected environment.
-7. Set repository Actions variable `CHROME_PUBLISH_ENABLED=true` only after a dry review of the workflow and initial manual publication.
+7. Publish the accepted version 1.0.0 draft manually using the dashboard. Deferred first publications cannot be replaced by an automated update.
+8. Verify that 1.0.0 is installable, mark Chrome `published` in `store/release-state.json`, then set repository Actions variable `CHROME_PUBLISH_ENABLED=true` after a dry review of the workflow.
 
 Avoid long-lived service-account JSON keys. The workflow requests a short-lived access token through GitHub OIDC.
 
@@ -40,4 +41,4 @@ Reference: [current `web-ext` command documentation](https://extensionworkshop.c
 
 ## Independence and protections
 
-Each store environment can require a reviewer and is enabled independently. Store secrets are never available to pull requests or the build job. Version tags are the only trigger for store jobs, the two-store release gate must be unlocked first, concurrency never cancels an active release, and Chrome refuses a new upload while a prior submission is pending.
+Each store environment can require a reviewer and is enabled independently. Store secrets are never available to pull requests or the build job. Version tags are the only trigger for store jobs, at least one store must have completed its initial publication, and each store job checks its own published status before running. Concurrency never cancels an active release, and Chrome refuses a new upload while a prior submission is pending.

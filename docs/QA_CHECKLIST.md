@@ -76,8 +76,9 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 ## Release and privacy
 
 - [ ] `pnpm release:status` matches the observed initial-publication state of both stores.
-- [ ] While either initial 1.0.0 submission is pending, `package.json` remains at 1.0.0 and no release tag exists.
-- [ ] After both initial listings are published, both versioned statuses are changed to `published` in a reviewed commit before preparing 1.0.1 or later.
+- [ ] While neither initial 1.0.0 submission is published, `package.json` remains at 1.0.0 and no release tag exists.
+- [ ] Before preparing 1.0.1 or later, at least one verified initial listing is marked `published` in a reviewed commit.
+- [ ] A store job remains skipped until that store's own initial 1.0.0 listing is published, even if its Actions enable variable is accidentally true.
 - [ ] Final icon is legible at 16 px and the canonical SVG is approved.
 - [ ] Public docs, screenshots, sources, and archives contain no captures, customer information, session data, secrets, or remote executable code.
 - [ ] Pages URLs load and store copy matches current behavior.

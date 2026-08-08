@@ -4,7 +4,12 @@ import path from 'node:path';
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const releaseStatePath = path.join(projectRoot, 'store/release-state.json');
 const packagePath = path.join(projectRoot, 'package.json');
-const allowedStatuses = new Set(['pending-review', 'published', 'action-required']);
+const allowedStatuses = new Set([
+  'pending-review',
+  'ready-to-publish',
+  'published',
+  'action-required',
+]);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -28,11 +33,11 @@ export function compareVersions(left, right) {
 }
 
 export function validateReleaseState(state) {
-  assert(state?.schemaVersion === 1, 'store/release-state.json must use schemaVersion 1.');
+  assert(state?.schemaVersion === 2, 'store/release-state.json must use schemaVersion 2.');
   parseVersion(state.initialVersion, 'Initial version');
   assert(
-    state.policy === 'wait-for-both-initial-publications',
-    'The release policy must wait for both initial store publications.',
+    state.policy === 'independent-store-publications',
+    'The release policy must allow each published store to update independently.',
   );
 
   const chrome = state.stores?.chrome;
@@ -59,15 +64,20 @@ export function validateReleaseState(state) {
   for (const [browser, store] of Object.entries(state.stores)) {
     assert(
       allowedStatuses.has(store.status),
-      `${browser} status must be pending-review, published, or action-required.`,
+      `${browser} status must be pending-review, ready-to-publish, published, or action-required.`,
     );
   }
 
   return state;
 }
 
-export function initialPublicationComplete(state) {
-  return state.stores.chrome.status === 'published' && state.stores.firefox.status === 'published';
+export function storeCanReceiveUpdates(state, browser) {
+  assert(browser === 'chrome' || browser === 'firefox', `Unsupported store: ${browser}.`);
+  return state.stores[browser].status === 'published';
+}
+
+export function anyStoreCanReceiveUpdates(state) {
+  return storeCanReceiveUpdates(state, 'chrome') || storeCanReceiveUpdates(state, 'firefox');
 }
 
 export async function loadReleaseContext() {
@@ -82,18 +92,18 @@ export async function loadReleaseContext() {
 }
 
 export function assertDevelopmentVersion({ packageJson, state }) {
-  if (!initialPublicationComplete(state)) {
+  if (!anyStoreCanReceiveUpdates(state)) {
     assert(
       packageJson.version === state.initialVersion,
-      `Keep package version ${state.initialVersion} until both initial store versions are published.`,
+      `Keep package version ${state.initialVersion} until at least one initial store version is published.`,
     );
   }
 }
 
 export function assertReleaseUnlocked({ packageJson, state }) {
   assert(
-    initialPublicationComplete(state),
-    'Release is locked until both initial store statuses are changed to published.',
+    anyStoreCanReceiveUpdates(state),
+    'Release is locked until at least one initial store status is changed to published.',
   );
   assert(
     compareVersions(packageJson.version, state.initialVersion) >= 0,
@@ -114,12 +124,13 @@ export function assertReleaseTag({ packageJson, state }, tag) {
 }
 
 export function releaseStatusSummary({ packageJson, state }) {
-  const complete = initialPublicationComplete(state);
+  const chromeReady = storeCanReceiveUpdates(state, 'chrome');
+  const firefoxReady = storeCanReceiveUpdates(state, 'firefox');
   return [
     `Development version: ${packageJson.version}`,
     `Initial store version: ${state.initialVersion}`,
-    `Chrome: ${state.stores.chrome.status} (${state.stores.chrome.itemId})`,
-    `Firefox: ${state.stores.firefox.status} (${state.stores.firefox.addonId})`,
-    `Version release gate: ${complete ? 'unlocked' : 'locked'}`,
+    `Chrome: ${state.stores.chrome.status} (${state.stores.chrome.itemId}); automated updates ${chromeReady ? 'eligible' : 'blocked'}`,
+    `Firefox: ${state.stores.firefox.status} (${state.stores.firefox.addonId}); automated updates ${firefoxReady ? 'eligible' : 'blocked'}`,
+    `Version release gate: ${chromeReady || firefoxReady ? 'unlocked' : 'locked'}`,
   ].join('\n');
 }

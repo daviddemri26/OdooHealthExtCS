@@ -50,12 +50,12 @@ See [Architecture](docs/ARCHITECTURE.md), [Odoo compatibility](docs/ODOO_COMPATI
 ```bash
 pnpm package
 pnpm release:status
-pnpm release -- patch    # only after both initial store versions are published
+pnpm release -- patch    # after at least one initial store version is published
 ```
 
 `pnpm package` validates, tests, builds, lints, scans, and creates browser and source archives plus checksums in `artifacts/`. While the manually submitted 1.0.0 packages are under review, normal code changes continue under the unchanged 1.0.0 development version and are recorded in `CHANGELOG.md` under `Unreleased`.
 
-The public store IDs and initial-review statuses live in `store/release-state.json`. Until both statuses are `published`, packaging remains available but version increments, release tags, and store submissions are blocked. After both first publications, update those two statuses in a reviewed commit and use `patch`, `minor`, or `major` to promote the accumulated Unreleased changes into the next version. `pnpm release` requires a clean, synchronized `main`.
+The public store IDs and initial-publication statuses live in `store/release-state.json`. Packaging remains available while both stores are pending, but version increments and release tags stay blocked until at least one initial version is published. Each store is then eligible for automated updates independently: Chrome can receive 1.0.1 while Firefox remains skipped, and Firefox joins a later shared release after its own 1.0.0 publication. Use `patch`, `minor`, or `major` to promote the accumulated Unreleased changes into the next version. `pnpm release` requires a clean, synchronized `main`.
 
 Every push and pull request produces short-lived GitHub Actions packages. A `vX.Y.Z` tag creates a permanent GitHub Release and submits to each enabled store. Store jobs remain safely skipped until their protected environments are configured. Follow the [release runbook](docs/RELEASE.md).
 

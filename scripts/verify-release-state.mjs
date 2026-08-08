@@ -1,9 +1,12 @@
+import { appendFile } from 'node:fs/promises';
+
 import {
   assertDevelopmentVersion,
   assertReleaseTag,
   assertReleaseUnlocked,
   loadReleaseContext,
   releaseStatusSummary,
+  storeCanReceiveUpdates,
 } from './release-state.mjs';
 
 const mode = process.argv[2] ?? 'development';
@@ -31,3 +34,14 @@ switch (mode) {
 }
 
 process.stdout.write(`${releaseStatusSummary(context)}\n`);
+
+if (process.env.GITHUB_OUTPUT) {
+  await appendFile(
+    process.env.GITHUB_OUTPUT,
+    [
+      `chrome_ready=${storeCanReceiveUpdates(context.state, 'chrome')}`,
+      `firefox_ready=${storeCanReceiveUpdates(context.state, 'firefox')}`,
+      '',
+    ].join('\n'),
+  );
+}

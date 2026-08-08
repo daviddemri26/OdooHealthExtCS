@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Standardized the official extension icon across the public site and added discreet © DDEM attribution to the popup, public pages, documentation, and store copy.
 - Approved the sanitized Chrome promotional image by exact checksum so replacement raster files still fail the privacy scan.
 - Kept development builds on version 1.0.0 while the initial Chrome and Firefox submissions are under review.
-- Added a versioned two-store publication gate that blocks version increments, release tags, and automated submissions until both initial listings are marked published.
+- Added independent, versioned store gates so Chrome can receive automated updates as soon as its initial listing is published while Firefox remains blocked until its own approval.
 - Moved the public Chrome item ID into the repository release state while keeping publication authorization in protected GitHub environments.
 - Required future releases to promote documented Unreleased changes into a new patch, minor, or major version.
 
