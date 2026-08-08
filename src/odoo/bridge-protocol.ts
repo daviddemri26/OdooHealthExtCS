@@ -1,7 +1,7 @@
 import type { CompatibilityCode } from '../shared/types';
 
 export const ODOO_BRIDGE_CHANNEL = 'odoo-health-ext-cs:rpc';
-export const ODOO_BRIDGE_VERSION = 1 as const;
+export const ODOO_BRIDGE_VERSION = 2 as const;
 export const ODOO_BRIDGE_ORIGIN = 'https://www.odoo.com';
 
 export const CANONICAL_HEALTH_NAMES = ['Health - High', 'Health - Medium', 'Health - Low'] as const;
@@ -23,6 +23,11 @@ export interface OdooBridgeFailure {
   message: string;
 }
 
+export interface OdooConnectionProbeResult {
+  authenticated: true;
+  userDisplayName?: string;
+}
+
 export interface OdooBridgeCall {
   model: string;
   method: string;
@@ -41,6 +46,7 @@ interface OdooBridgeRequestBase {
 export type OdooBridgeRequest = OdooBridgeRequestBase &
   (
     | { kind: 'ping' }
+    | { kind: 'probe' }
     | {
         kind: 'call';
         call: OdooBridgeCall;
@@ -252,7 +258,7 @@ export function isOdooBridgeRequest(value: unknown): value is OdooBridgeRequest 
   ) {
     return false;
   }
-  if (value.kind === 'ping')
+  if (value.kind === 'ping' || value.kind === 'probe')
     return hasExactKeys(value, [
       'channel',
       'version',

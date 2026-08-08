@@ -70,6 +70,49 @@ async function waitForCalls(window: FakeBridgeWindow, count: number): Promise<Od
 }
 
 describe('page-context Odoo gateway', () => {
+  it('checks the general Odoo session independently from feature RPC calls', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    bridgeWindow.responder = (request) => {
+      if (request.kind === 'ping') bridgeWindow.respond(request, { ready: true });
+      if (request.kind === 'probe') bridgeWindow.respond(request, { authenticated: true });
+    };
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    await expect(gateway.checkConnection()).resolves.toEqual({ authenticated: true });
+    expect(bridgeWindow.posted.map((request) => request.kind)).toEqual(['ping', 'probe']);
+    expect(bridgeWindow.posted.some((request) => request.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('returns the connected user label and rejects malformed probe results', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    bridgeWindow.responder = (request) => {
+      if (request.kind === 'ping') bridgeWindow.respond(request, { ready: true });
+      if (request.kind === 'probe') {
+        bridgeWindow.respond(request, { authenticated: true, userDisplayName: 'Demo User' });
+      }
+    };
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+    await expect(gateway.checkConnection()).resolves.toEqual({
+      authenticated: true,
+      userDisplayName: 'Demo User',
+    });
+    gateway.dispose();
+
+    const malformedWindow = new FakeBridgeWindow();
+    malformedWindow.responder = (request) => {
+      if (request.kind === 'ping') malformedWindow.respond(request, { ready: true });
+      if (request.kind === 'probe') {
+        malformedWindow.respond(request, { authenticated: true, userDisplayName: 17 });
+      }
+    };
+    const malformedGateway = new PageContextOdooGateway(malformedWindow);
+    await expect(malformedGateway.checkConnection()).rejects.toMatchObject({
+      code: 'incompatible_response',
+    });
+    malformedGateway.dispose();
+  });
+
   it('handshakes and correlates concurrent calls returned out of order', async () => {
     const bridgeWindow = new FakeBridgeWindow();
     enablePing(bridgeWindow);

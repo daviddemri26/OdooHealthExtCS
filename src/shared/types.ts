@@ -78,7 +78,7 @@ export interface OdooGateway {
   write(model: string, ids: number[], values: OdooValues): Promise<boolean>;
 }
 
-export type CompatibilityCode =
+export type ConnectionCode =
   | 'ready'
   | 'bridge_unavailable'
   | 'timeout'
@@ -86,14 +86,14 @@ export type CompatibilityCode =
   | 'session_expired'
   | 'access_denied'
   | 'incompatible_endpoint'
-  | 'missing_health_tags'
-  | 'missing_fields'
   | 'incompatible_response'
   | 'server_error';
 
+export type CompatibilityCode = ConnectionCode | 'missing_health_tags' | 'missing_fields';
+
 export interface CompatibilityStatus {
   ok: boolean;
-  code: CompatibilityCode;
+  code: ConnectionCode;
   checkedAt: string;
 }
 

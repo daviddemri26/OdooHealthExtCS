@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { executeOdooBridgeCall, installOdooBridge } from '../src/odoo/bridge-runtime';
+import {
+  executeOdooBridgeCall,
+  executeOdooConnectionProbe,
+  installOdooBridge,
+} from '../src/odoo/bridge-runtime';
 import {
   ODOO_BRIDGE_CHANNEL,
   ODOO_BRIDGE_ORIGIN,
@@ -89,6 +93,81 @@ describe('MAIN-world Odoo bridge runtime', () => {
       params: readTagsCall,
       id: 'request-12345678',
     });
+  });
+
+  it('returns only the sanitized display name needed by the live connection UI', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        jsonrpc: '2.0',
+        id: 'request-connection',
+        result: {
+          uid: 17,
+          name: 'Private User',
+          username: 'private@example.com',
+          session_id: 'must-not-cross',
+        },
+      }),
+    );
+
+    const result = await executeOdooConnectionProbe({
+      fetcher,
+      origin: ODOO_BRIDGE_ORIGIN,
+      requestId: 'request-connection',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      result: { authenticated: true, userDisplayName: 'Private User' },
+    });
+    expect(JSON.stringify(result)).not.toContain('private@example.com');
+    expect(JSON.stringify(result)).not.toContain('must-not-cross');
+    const [url, request] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe('https://www.odoo.com/web/session/get_session_info');
+    expect(request).toMatchObject({ method: 'POST', credentials: 'same-origin' });
+    expect(JSON.parse(String(request?.body))).toEqual({
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {},
+      id: 'request-connection',
+    });
+  });
+
+  it('sanitizes and bounds the connected user label', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        jsonrpc: '2.0',
+        id: null,
+        result: { uid: 17, name: `  Private\u202e   User ${'x'.repeat(140)}  ` },
+      }),
+    );
+
+    const result = await executeOdooConnectionProbe({
+      fetcher,
+      origin: ODOO_BRIDGE_ORIGIN,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('Expected a successful session probe.');
+    const label = (result.result as { userDisplayName: string }).userDisplayName;
+    expect(label).toMatch(/^Private User x+/);
+    expect(label).not.toContain('\u202e');
+    expect(label).toHaveLength(120);
+  });
+
+  it('distinguishes an expired session from an incompatible session response', async () => {
+    const expiredFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ jsonrpc: '2.0', id: null, result: { uid: false } }));
+    await expect(
+      executeOdooConnectionProbe({ fetcher: expiredFetcher, origin: ODOO_BRIDGE_ORIGIN }),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'session_expired' } });
+
+    const incompatibleFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ jsonrpc: '2.0', id: null, result: { company_id: 1 } }));
+    await expect(
+      executeOdooConnectionProbe({ fetcher: incompatibleFetcher, origin: ODOO_BRIDGE_ORIGIN }),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
   });
 
   it('rejects invalid operations before contacting Odoo', async () => {

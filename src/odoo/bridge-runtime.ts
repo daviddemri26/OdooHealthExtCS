@@ -44,6 +44,23 @@ function isPositiveId(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
+function sanitizeUserDisplayName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const withoutControls = Array.from(value.normalize('NFKC'))
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return !(
+        codePoint <= 0x1f ||
+        (codePoint >= 0x7f && codePoint <= 0x9f) ||
+        (codePoint >= 0x202a && codePoint <= 0x202e) ||
+        (codePoint >= 0x2066 && codePoint <= 0x2069)
+      );
+    })
+    .join('');
+  const sanitized = withoutControls.replace(/\s+/g, ' ').trim().slice(0, 120);
+  return sanitized || null;
+}
+
 function sanitizeMany2One(value: unknown): false | [number, string] {
   if (value === false) return false;
   if (
@@ -247,6 +264,103 @@ export async function executeOdooBridgeCall(
   }
 }
 
+export async function executeOdooConnectionProbe(
+  options: {
+    fetcher?: typeof fetch;
+    origin?: string;
+    timeoutMs?: number;
+    requestId?: string;
+  } = {},
+): Promise<BridgeExecutionResult> {
+  const origin = options.origin ?? window.location.origin;
+  if (origin !== ODOO_BRIDGE_ORIGIN) {
+    return { ok: false, failure: bridgeFailure('incompatible_endpoint') };
+  }
+
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), options.timeoutMs ?? 15_000);
+  const fetcher = options.fetcher ?? window.fetch.bind(window);
+
+  try {
+    const endpoint = new URL('/web/session/get_session_info', origin).href;
+    const response = await fetcher(endpoint, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'call',
+        params: {},
+        id: options.requestId ?? null,
+      }),
+      signal: controller.signal,
+    });
+
+    if (response.redirected || response.status === 401) {
+      return { ok: false, failure: bridgeFailure('session_expired') };
+    }
+    if (response.status === 403) {
+      return { ok: false, failure: bridgeFailure('access_denied') };
+    }
+    if (response.status === 404 || response.status === 405) {
+      return { ok: false, failure: bridgeFailure('incompatible_endpoint') };
+    }
+    if (!response.ok) {
+      return { ok: false, failure: bridgeFailure('server_error') };
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.toLocaleLowerCase().includes('json')) {
+      return { ok: false, failure: bridgeFailure('session_expired') };
+    }
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { ok: false, failure: bridgeFailure('incompatible_response') };
+    }
+    if (isJsonRpcError(payload)) {
+      return { ok: false, failure: classifyJsonRpcError(payload.error) };
+    }
+    if (!isJsonRpcSuccess(payload) || !isRecord(payload.result)) {
+      return { ok: false, failure: bridgeFailure('incompatible_response') };
+    }
+
+    const session = payload.result;
+    const hasUserIdentifier = 'uid' in session || 'user_id' in session;
+    const userIdentifier = session.uid ?? session.user_id;
+    if (!hasUserIdentifier) {
+      return { ok: false, failure: bridgeFailure('incompatible_response') };
+    }
+    if (!isPositiveId(userIdentifier)) {
+      return { ok: false, failure: bridgeFailure('session_expired') };
+    }
+
+    const userDisplayName = sanitizeUserDisplayName(session.name ?? session.username);
+    return {
+      ok: true,
+      result: {
+        authenticated: true,
+        ...(userDisplayName ? { userDisplayName } : {}),
+      },
+    };
+  } catch (error) {
+    if (
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (isRecord(error) && error.name === 'AbortError')
+    ) {
+      return { ok: false, failure: bridgeFailure('timeout') };
+    }
+    return { ok: false, failure: bridgeFailure('network') };
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 export function installOdooBridge(pageWindow: Window = window): () => void {
   const previous = Reflect.get(pageWindow, BRIDGE_MARKER) as BridgeMarker | undefined;
   previous?.dispose();
@@ -277,7 +391,11 @@ export function installOdooBridge(pageWindow: Window = window): () => void {
       return;
     }
 
-    void executeOdooBridgeCall(request.call, { requestId: request.requestId }).then((result) => {
+    const execution =
+      request.kind === 'probe'
+        ? executeOdooConnectionProbe({ requestId: request.requestId })
+        : executeOdooBridgeCall(request.call, { requestId: request.requestId });
+    void execution.then((result) => {
       if (controller.signal.aborted) return;
       const response: OdooBridgeResponse = {
         channel: ODOO_BRIDGE_CHANNEL,

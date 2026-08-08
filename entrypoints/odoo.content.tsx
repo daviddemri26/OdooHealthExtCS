@@ -1,4 +1,5 @@
 import { createRoot, type Root } from 'react-dom/client';
+import { browser } from 'wxt/browser';
 
 import { ContentApp } from '../src/content/ContentApp';
 import { attachPanelHost, createExtensionHost } from '../src/content/host';
@@ -8,12 +9,34 @@ import {
   isRenderedSubscriptionForm,
   parseSubscriptionRoute,
 } from '../src/odoo/routes';
-import { PageContextOdooGateway } from '../src/odoo/gateway';
+import { OdooGatewayError, PageContextOdooGateway } from '../src/odoo/gateway';
 import { measureOrderDateAnchor } from '../src/odoo/layout';
+import { setCompatibilityStatus } from '../src/shared/compatibility';
+import {
+  isLiveConnectionRequest,
+  type LiveConnectionIdentity,
+} from '../src/shared/live-connection';
 import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from '../src/shared/settings';
-import type { ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
+import type { ConnectionCode, ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
 
 const ROOT_ID = 'odoo-health-ext-cs-root';
+const CONNECTION_CODES = new Set<ConnectionCode>([
+  'bridge_unavailable',
+  'timeout',
+  'network',
+  'session_expired',
+  'access_denied',
+  'incompatible_endpoint',
+  'incompatible_response',
+  'server_error',
+]);
+
+function getConnectionFailureCode(error: unknown): ConnectionCode {
+  if (error instanceof OdooGatewayError && CONNECTION_CODES.has(error.code as ConnectionCode)) {
+    return error.code as ConnectionCode;
+  }
+  return 'server_error';
+}
 
 function parseColor(value: string): [number, number, number] | null {
   const match = value.match(/rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)/i);
@@ -56,6 +79,31 @@ export default defineContentScript({
     let settings: ExtensionSettings = DEFAULT_SETTINGS;
     let lastHref = window.location.href;
     let scheduled = 0;
+    let connectionCheckSequence = 0;
+    let liveConnectionIdentity: LiveConnectionIdentity | null = null;
+    let active = true;
+
+    const refreshConnectionStatus = async (): Promise<void> => {
+      const sequence = ++connectionCheckSequence;
+      let ok = true;
+      let code: ConnectionCode = 'ready';
+      try {
+        const result = await gateway.checkConnection();
+        liveConnectionIdentity = result.userDisplayName
+          ? { userDisplayName: result.userDisplayName }
+          : null;
+      } catch (error) {
+        ok = false;
+        code = getConnectionFailureCode(error);
+        liveConnectionIdentity = null;
+      }
+      if (!active || sequence !== connectionCheckSequence) return;
+      try {
+        await setCompatibilityStatus(ok, code);
+      } catch {
+        // Connection status is informational and must never block the extension UI.
+      }
+    };
 
     const render = (): void => {
       const route = getActiveRoute();
@@ -109,6 +157,7 @@ export default defineContentScript({
       if (window.location.href === lastHref) return;
       lastHref = window.location.href;
       scheduleRender();
+      void refreshConnectionStatus();
     }, 500);
 
     const unsubscribe = subscribeToSettings((nextSettings) => {
@@ -116,23 +165,58 @@ export default defineContentScript({
       renderNow();
     });
 
+    const handleRuntimeMessage: Parameters<typeof browser.runtime.onMessage.addListener>[0] = (
+      message,
+      sender,
+      sendResponse,
+    ) => {
+      if (!isLiveConnectionRequest(message)) return undefined;
+      if (sender.id && sender.id !== browser.runtime.id) return undefined;
+
+      // Firefox does not reliably treat a plain synchronous object returned by an
+      // onMessage listener as the message response. Keep the channel open and use
+      // sendResponse explicitly so both Firefox and Chromium receive the same
+      // freshly checked identity.
+      void gateway
+        .checkConnection()
+        .then((result) => {
+          liveConnectionIdentity = result.userDisplayName
+            ? { userDisplayName: result.userDisplayName }
+            : null;
+          sendResponse(liveConnectionIdentity);
+        })
+        .catch(() => {
+          liveConnectionIdentity = null;
+          sendResponse(null);
+        });
+      return true;
+    };
+    browser.runtime.onMessage.addListener(handleRuntimeMessage);
+
     window.addEventListener('popstate', scheduleRender);
     window.addEventListener('hashchange', scheduleRender);
     window.addEventListener('resize', scheduleRender);
     const colorScheme = matchMedia('(prefers-color-scheme: dark)');
     colorScheme.addEventListener('change', scheduleRender);
+    const handleOnline = (): void => void refreshConnectionStatus();
+    window.addEventListener('online', handleOnline);
 
     void initialize();
+    void refreshConnectionStatus();
 
     ctx.onInvalidated(() => {
+      active = false;
+      connectionCheckSequence += 1;
       gateway.dispose();
       observer.disconnect();
       window.clearInterval(routeInterval);
       window.clearTimeout(scheduled);
       unsubscribe();
+      browser.runtime.onMessage.removeListener(handleRuntimeMessage);
       window.removeEventListener('popstate', scheduleRender);
       window.removeEventListener('hashchange', scheduleRender);
       window.removeEventListener('resize', scheduleRender);
+      window.removeEventListener('online', handleOnline);
       colorScheme.removeEventListener('change', scheduleRender);
       root.unmount();
       panelHost.remove();

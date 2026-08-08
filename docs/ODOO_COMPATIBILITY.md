@@ -22,10 +22,10 @@ For each 19.x release, run the complete QA checklist in both browsers. Confirm t
 
 ## Odoo 20
 
-Treat Odoo 20 as unsupported until a controlled compatibility pass succeeds. Check the page-bridge handshake, RPC endpoint, JSON-RPC envelope, model and field names, many-to-many command format, route structure, form markers, CSP behavior, and browser-store policies. Update the bridge allow-list only for reviewed, feature-required contracts and add sanitized synthetic tests for every change before declaring support.
+Treat Odoo 20 as unsupported until a controlled compatibility pass succeeds. Check the page-bridge handshake, read-only session endpoint, RPC endpoint, JSON-RPC envelope, model and field names, many-to-many command format, route structure, form markers, CSP behavior, and browser-store policies. Update the bridge allow-list only for reviewed, feature-required contracts and add sanitized synthetic tests for every change before declaring support.
 
 ## Failure policy
 
-Unknown fields, wrong relations, malformed records, missing or duplicate canonical tag definitions, access denial, and unsupported responses fail closed. The affected feature becomes unavailable and exposes only a sanitized compatibility status. Do not add fallback writes based on visible labels or positional DOM scraping.
+Unknown fields, wrong relations, malformed records, missing or duplicate canonical tag definitions, access denial, and unsupported responses fail closed. The affected feature becomes unavailable and exposes only a sanitized feature error; it does not overwrite the independent general connection status. Do not add fallback writes based on visible labels or positional DOM scraping.
 
 Record verified versions and dates in release notes. A successful build proves package integrity, not live Odoo compatibility; controlled noncritical record validation is required before the first store release and after material Odoo changes.

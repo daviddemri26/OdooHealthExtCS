@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CANONICAL_HEALTH_NAMES,
+  ODOO_BRIDGE_CHANNEL,
+  ODOO_BRIDGE_VERSION,
+  isOdooBridgeRequest,
   validateOdooBridgeCall,
   type OdooBridgeCall,
 } from '../src/odoo/bridge-protocol';
@@ -17,6 +20,21 @@ function call(overrides: Partial<OdooBridgeCall> = {}): OdooBridgeCall {
 }
 
 describe('Odoo bridge allow-list', () => {
+  it('accepts only an exact versioned connection probe request', () => {
+    const probe = {
+      channel: ODOO_BRIDGE_CHANNEL,
+      version: ODOO_BRIDGE_VERSION,
+      direction: 'request',
+      clientId: 'client-12345678',
+      requestId: 'request-12345678',
+      kind: 'probe',
+    };
+
+    expect(isOdooBridgeRequest(probe)).toBe(true);
+    expect(isOdooBridgeRequest({ ...probe, model: 'res.users' })).toBe(false);
+    expect(isOdooBridgeRequest({ ...probe, version: ODOO_BRIDGE_VERSION - 1 })).toBe(false);
+  });
+
   it('accepts every operation required by Health and Industry', () => {
     const allowed: OdooBridgeCall[] = [
       call({

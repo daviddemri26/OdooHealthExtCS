@@ -26,6 +26,15 @@
       </p>
       <h2>Data processed</h2>
       <p>
+        On every matching <code>https://www.odoo.com/odoo*</code> workspace page, the extension
+        performs a read-only same-origin session check so the control panel can report whether the
+        Odoo connection is ready. When the settings popup is opened from an active Odoo workspace
+        tab, it may also display the current Odoo user's name or login so the user can confirm which
+        account is connected. This label is sanitized, kept only in the active tab's memory, and
+        never written to browser storage. User IDs, cookies, session identifiers, and the raw
+        session response do not leave the page bridge.
+      </p>
+      <p>
         On matching Odoo subscription pages whose visible status badge is In Progress, enabled
         features read only the fields needed for account health and the exact linked customer's
         industry. User-requested updates are sent back to Odoo through the browser's current
@@ -40,9 +49,11 @@
       <h2>Data stored</h2>
       <p>
         Browser storage contains only enablement, feature, success-confirmation, and appearance
-        preferences plus a sanitized compatibility code and timestamp. The extension does not store
-        Odoo records, customer data, cookies, passwords, CSRF values, session identifiers,
-        credentials, request histories, or raw server stack traces.
+        preferences plus a sanitized general connection code and timestamp. The extension does not
+        persist Odoo records, customer data, names, logins, email addresses, cookies, passwords,
+        CSRF values, user identifiers, session identifiers, credentials, request histories, or raw
+        server stack traces. The connected-user label exists only in volatile memory while the
+        matching Odoo tab remains open.
       </p>
       <h2>Permissions</h2>
       <p>

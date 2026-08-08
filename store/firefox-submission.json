@@ -15,7 +15,7 @@
     "en-US": "https://daviddemri26.github.io/OdooHealthExtCS/support.html"
   },
   "privacy_policy": {
-    "en-US": "OdooHealthExtCS processes account-health and customer-industry data only in the browser and through the user's current same-origin Odoo session to perform explicit user actions. It sends no Odoo page data to the developer or external services, uses no analytics or advertising, and stores only extension preferences plus a sanitized compatibility status. Full policy: https://daviddemri26.github.io/OdooHealthExtCS/privacy.html"
+    "en-US": "OdooHealthExtCS processes account-health and customer-industry data only in the browser and through the user's current same-origin Odoo session to perform explicit user actions. The settings popup may show the active Odoo user's display name or login; this value remains only in volatile tab memory and is never stored or transmitted to the developer or any third party. The extension sends no Odoo page data to external services, uses no analytics or advertising, and stores only extension preferences plus a sanitized compatibility status. Full policy: https://daviddemri26.github.io/OdooHealthExtCS/privacy.html"
   },
   "requires_payment": false,
   "version": {

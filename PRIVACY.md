@@ -6,13 +6,15 @@ OdooHealthExtCS is an internal browser productivity extension for authorized Odo
 
 ## Data processed
 
+On every matching `https://www.odoo.com/odoo*` workspace page, the extension performs a read-only same-origin session check so its control panel can report whether the current Odoo connection is ready. When the settings popup is opened from an active Odoo workspace tab, it may also display the current Odoo user's name or login so the user can confirm which account is connected. This label is sanitized, kept only in the active tab's memory, and is never written to browser storage. User IDs, cookies, session identifiers, and the raw session response do not leave the page bridge.
+
 When an authorized user opens a matching Odoo subscription page whose visible status badge is **In Progress** and enables a feature, the extension reads only the fields needed to show account health and the linked customer's industry. It processes tag identifiers and names, the subscription's linked partner identifier and display name, the current industry, and the available industry choices. A narrowly allow-listed page bridge sends user-requested operations back to Odoo through the current authenticated same-origin session. The bridge rejects unrecognized models, methods, fields, searches, and write shapes before contacting Odoo.
 
 This processing occurs in the browser and between the browser and `www.odoo.com`. The extension does not transmit Odoo page data to the developer, analytics providers, advertising networks, or other external services.
 
 ## Data stored
 
-Browser synchronized storage contains only versioned extension preferences: master enablement, feature enablement, per-feature success-confirmation preferences, and appearance. Browser local storage may contain a sanitized compatibility code and timestamp. The extension does not store Odoo records, customer data, cookies, passwords, CSRF values, session identifiers, credentials, request payload histories, or raw server stack traces.
+Browser synchronized storage contains only versioned extension preferences: master enablement, feature enablement, per-feature success-confirmation preferences, and appearance. Browser local storage may contain a sanitized general connection code and timestamp. The connected-user label exists only in volatile memory while the matching Odoo tab remains open. The extension does not persist Odoo records, customer data, names, logins, email addresses, cookies, passwords, CSRF values, user identifiers, session identifiers, credentials, request payload histories, or raw server stack traces.
 
 Browser vendors may synchronize settings according to the user's own browser-account configuration. Odoo retains record changes according to Odoo's policies and the user's organization. This extension does not create a separate record database.
 

@@ -24,7 +24,9 @@ The compact frame fits its current content, while the Industry picker expands in
 
 ## Odoo RPC
 
-`PageContextOdooGateway` keeps the typed `read`, `fieldsGet`, `searchRead`, and `write` interface used by features. It exchanges versioned messages with the page bridge using random client and request IDs. Both sides require the exact `window` source, `https://www.odoo.com` origin, protocol version, client ID, and pending request ID. Concurrent calls are correlated independently; stale or foreign responses are ignored. A short handshake distinguishes a missing bridge from a 15-second Odoo timeout, and disposal rejects all pending calls.
+`PageContextOdooGateway` keeps the typed `read`, `fieldsGet`, `searchRead`, and `write` interface used by features. It also exposes an internal read-only connection check that is independent from every feature. It exchanges versioned messages with the page bridge using random client and request IDs. Both sides require the exact `window` source, `https://www.odoo.com` origin, protocol version, client ID, and pending request ID. Concurrent calls are correlated independently; stale or foreign responses are ignored. A short handshake distinguishes a missing bridge from a 15-second Odoo timeout, and disposal rejects all pending calls.
+
+On every allowed `https://www.odoo.com/odoo*` page, the isolated entrypoint asks the bridge to verify the current authenticated session through `/web/session/get_session_info`. This probe runs even when the page is not a subscription and does not depend on Health, Industry, record status, or enabled feature settings. A successful probe returns only `{ authenticated: true, userDisplayName? }`: the optional name or login is sanitized and bounded before crossing the bridge, while user IDs, cookies, session identifiers, and the raw session response never cross. The isolated script keeps the label only in volatile tab memory. When the popup opens, it uses the existing host access to request that live value from the active Odoo content script; no `tabs`, `identity`, or cookie permission is declared. The label is never written to local or synchronized storage. The probe repeats after Odoo SPA navigation and when the browser comes back online.
 
 The bridge validates every request before contacting Odoo, then uses the absolute same-origin `/web/dataset/call_kw/{model}/{method}` URL with `credentials: same-origin`. Its allow-list is limited to:
 
@@ -35,7 +37,7 @@ The bridge validates every request before contacting Odoo, then uses the absolut
 
 Every other model, method, field, domain, record batch, or write shape fails before fetch. Successful data is reduced to the allowed fields before crossing back to the isolated script.
 
-Before enabling writes, services confirm the relevant field type and relation. Responses are shape-checked. Bridge absence, timeout, authentication, authorization, network, endpoint, missing-field, incompatibility, and general server failures become distinct sanitized compatibility codes and user messages; raw Odoo error data is never forwarded, persisted, or shown.
+Before enabling writes, services confirm the relevant field type and relation. Responses are shape-checked. The general connection check reports only bridge absence, timeout, authentication, authorization, network, endpoint, response-shape, and server failures. Missing tags, missing fields, and other feature capability failures stay local to the affected feature and never change the global Odoo connection state. Raw Odoo error data is never forwarded, persisted, or shown.
 
 ## Account health
 
@@ -49,7 +51,7 @@ The industry service validates `res.partner.industry_id`, reads `sale.order.part
 
 ## Settings and compatibility
 
-`ExtensionSettings` has schema version 2 and stores only the master switch, two feature switches, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled. Version 1 settings migrate automatically without changing existing feature or appearance choices. A sanitized compatibility code and timestamp are stored locally. Runtime validation rejects malformed types and unknown compatibility codes. Storage failures fall back safely in the UI, and diagnostic compatibility storage can never block Health or Industry controls.
+`ExtensionSettings` has schema version 2 and stores only the master switch, two feature switches, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled. Version 1 settings migrate automatically without changing existing feature or appearance choices. A sanitized general connection code and timestamp are stored locally. The optional connected-user label is explicitly excluded from storage and is available only through the active tab's live message listener. Runtime validation rejects malformed types, unknown connection codes, legacy feature-specific diagnostic codes, and malformed live identity responses. The popup subscribes to connection-status changes so an open panel reflects a completed probe immediately. Storage failures fall back safely in the UI, and connection-status storage can never block any feature controls.
 
 ## Status and Undo
 

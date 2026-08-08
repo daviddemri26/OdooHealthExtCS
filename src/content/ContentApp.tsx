@@ -17,7 +17,6 @@ import {
 } from '../features/industry/service';
 import { OdooGatewayError } from '../odoo/gateway';
 import type { OdooFieldAnchor } from '../odoo/layout';
-import { setCompatibilityStatus } from '../shared/compatibility';
 import { saveSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
@@ -60,14 +59,6 @@ function createMessage(
 function publicError(error: unknown): { message: string; code: OdooGatewayError['code'] } {
   if (error instanceof OdooGatewayError) return { message: error.message, code: error.code };
   return { message: 'The extension could not complete this action.', code: 'server_error' };
-}
-
-async function recordCompatibility(ok: boolean, code: OdooGatewayError['code']): Promise<void> {
-  try {
-    await setCompatibilityStatus(ok, code);
-  } catch {
-    // Compatibility storage is diagnostic only and must never block the primary controls.
-  }
 }
 
 export function StatusBar({
@@ -491,8 +482,6 @@ export function ContentApp({
     let active = true;
     const load = async (): Promise<void> => {
       const tasks: Promise<void>[] = [];
-      let compatibilityFailure: OdooGatewayError['code'] | null = null;
-
       if (settings.features.health) {
         setHealthLoading(true);
         tasks.push(
@@ -512,7 +501,6 @@ export function ContentApp({
             .catch(async (error: unknown) => {
               if (!active) return;
               const failure = publicError(error);
-              compatibilityFailure ??= failure.code;
               setHealthError(failure.message);
               notify(createMessage('error', failure.message));
             })
@@ -531,7 +519,6 @@ export function ContentApp({
             .catch(async (error: unknown) => {
               if (!active) return;
               const failure = publicError(error);
-              compatibilityFailure ??= failure.code;
               setIndustryError(failure.message);
             })
             .finally(() => active && setIndustryLoading(false)),
@@ -540,7 +527,6 @@ export function ContentApp({
 
       await Promise.allSettled(tasks);
       if (active && tasks.length > 0) {
-        await recordCompatibility(compatibilityFailure === null, compatibilityFailure ?? 'ready');
         if (active) setReadyRecordId(recordId);
       }
     };
@@ -608,7 +594,6 @@ export function ContentApp({
                 } catch (error) {
                   const failure = publicError(error);
                   notify(createMessage('error', failure.message));
-                  await recordCompatibility(false, failure.code);
                 }
               },
             },
@@ -623,7 +608,6 @@ export function ContentApp({
       setHealth(previousHealth);
       const failure = publicError(error);
       notify(createMessage('error', failure.message));
-      await recordCompatibility(false, failure.code);
     } finally {
       setHealthPending(false);
     }
@@ -669,7 +653,6 @@ export function ContentApp({
                 } catch (error) {
                   const failure = publicError(error);
                   notify(createMessage('error', failure.message));
-                  await recordCompatibility(false, failure.code);
                 }
               },
             },
@@ -684,7 +667,6 @@ export function ContentApp({
       setIndustry(previousIndustry);
       const failure = publicError(error);
       notify(createMessage('error', failure.message));
-      await recordCompatibility(false, failure.code);
     } finally {
       setIndustryPending(false);
     }

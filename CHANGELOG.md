@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- Added a live connected-user indicator to the dedicated Odoo Connection page without persisting the name or login or requesting any new browser permission.
+- Generalized the Odoo connection check to every allowed workspace page with a read-only session probe, independently from subscription routes, record status, Account Health, and Industry.
+- Separated global session diagnostics from feature-specific capability and write errors, and updated the popup with generic connection and recovery messages.
+- Redesigned the popup as a scalable control panel with dedicated Connection, Settings, Account Health, and Industry pages; Connection groups session status, privacy, and scope while Settings contains appearance and product information.
 - Consolidated version, copyright, Odoo scope, and product website details inside the popup's Private by design card.
 - Limited the inline Health and Industry controls to subscription forms whose visible status badge reads exactly In Progress.
 - Attenuated unset Health and Industry values to make incomplete account data easier to recognize.

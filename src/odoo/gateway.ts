@@ -13,6 +13,7 @@ import {
   bridgeFailure,
   isOdooBridgeResponse,
   type OdooBridgeCall,
+  type OdooConnectionProbeResult,
   type OdooBridgeRequest,
 } from './bridge-protocol';
 
@@ -28,6 +29,9 @@ interface PendingRequest {
   reject: (error: OdooGatewayError) => void;
   timeout: ReturnType<typeof globalThis.setTimeout>;
 }
+
+type OutboundBridgeRequest =
+  { kind: 'ping' } | { kind: 'probe' } | { kind: 'call'; call: OdooBridgeCall };
 
 export class OdooGatewayError extends Error {
   constructor(
@@ -92,6 +96,22 @@ export class PageContextOdooGateway implements OdooGateway {
     return this.callKw<boolean>(model, 'write', [ids, values], {});
   }
 
+  async checkConnection(): Promise<OdooConnectionProbeResult> {
+    await this.ensureReady();
+    const result = await this.sendRequest({ kind: 'probe' }, this.timeoutMs, false);
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      (result as { authenticated?: unknown }).authenticated !== true ||
+      ('userDisplayName' in result &&
+        typeof (result as { userDisplayName?: unknown }).userDisplayName !== 'string')
+    ) {
+      const failure = bridgeFailure('incompatible_response');
+      throw new OdooGatewayError(failure.code, failure.message);
+    }
+    return result as OdooConnectionProbeResult;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -131,8 +151,7 @@ export class PageContextOdooGateway implements OdooGateway {
   }
 
   private sendRequest(
-    requestBody: Pick<OdooBridgeRequest, 'kind'> &
-      Partial<Pick<Extract<OdooBridgeRequest, { kind: 'call' }>, 'call'>>,
+    requestBody: OutboundBridgeRequest,
     timeoutMs: number,
     isReadyCheck: boolean,
   ): Promise<unknown> {
@@ -142,25 +161,17 @@ export class PageContextOdooGateway implements OdooGateway {
     }
 
     const requestId = randomIdentifier('request');
+    const base = {
+      channel: ODOO_BRIDGE_CHANNEL,
+      version: ODOO_BRIDGE_VERSION,
+      direction: 'request',
+      clientId: this.clientId,
+      requestId,
+    } as const;
     const request: OdooBridgeRequest =
-      requestBody.kind === 'ping'
-        ? {
-            channel: ODOO_BRIDGE_CHANNEL,
-            version: ODOO_BRIDGE_VERSION,
-            direction: 'request',
-            clientId: this.clientId,
-            requestId,
-            kind: 'ping',
-          }
-        : {
-            channel: ODOO_BRIDGE_CHANNEL,
-            version: ODOO_BRIDGE_VERSION,
-            direction: 'request',
-            clientId: this.clientId,
-            requestId,
-            kind: 'call',
-            call: requestBody.call as OdooBridgeCall,
-          };
+      requestBody.kind === 'call'
+        ? { ...base, kind: 'call', call: requestBody.call }
+        : { ...base, kind: requestBody.kind };
 
     return new Promise((resolve, reject) => {
       const timeout = globalThis.setTimeout(() => {

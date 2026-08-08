@@ -6,19 +6,19 @@ Confirm the URL starts exactly with `https://www.odoo.com/odoo`, the active page
 
 ## Session expired
 
-Sign in to Odoo again in the same tab and reload the subscription. The extension does not store or refresh sessions and cannot ask for credentials.
+Sign in to Odoo again in the same browser and reload any page under `https://www.odoo.com/odoo`. The extension does not store or refresh sessions and cannot ask for credentials.
 
 ## Extension connection unavailable
 
-This status means the isolated interface could not complete its versioned handshake with the `MAIN`-world page bridge. Reload the Odoo tab after installing or reloading the extension. If it persists, reload the unpacked extension in the browser's extension page, then reload the Odoo tab. Do not broaden site permissions or enable cookie access.
+This status means the isolated interface could not complete its versioned handshake with the `MAIN`-world page bridge. It is independent from Health, Industry, and subscription records. Reload the current Odoo page after installing or reloading the extension. If it persists, disable and re-enable the extension in the browser's extension manager, then reload the Odoo page. Do not broaden site permissions or enable cookie access.
 
 ## Request timed out or network unavailable
 
-A timeout means the page bridge started correctly but Odoo did not complete the allowed request within 15 seconds. A network status means the browser could not reach the same-origin Odoo endpoint. Confirm the Odoo page itself still works, retry once, and record only the sanitized compatibility code if support is needed.
+A timeout means the page bridge started correctly but Odoo did not complete the read-only session check within 15 seconds. A network status means the browser could not reach the same-origin Odoo endpoint. Confirm the Odoo page itself still works, reload any Odoo workspace page, and record only the sanitized connection code if support is needed.
 
 ## Permission or access denied
 
-Your Odoo user may read the record but lack write access to the relevant field. Verify the same change can be made through Odoo's native interface. Request the correct Odoo access through normal internal channels; do not grant the extension broader browser permissions.
+For a general connection status, confirm that the current account can access the internal Odoo workspace, then sign in again or contact an Odoo administrator. A feature can separately report a record or field permission failure even while the general connection remains ready. Verify that feature action through Odoo's native interface and request the correct Odoo access through normal internal channels; do not grant the extension broader browser permissions.
 
 ## Health is unavailable
 
@@ -34,7 +34,7 @@ Keep the error visible, confirm connectivity and Odoo permissions, reload the re
 
 ## Compatibility warning after an Odoo update
 
-An incompatible-endpoint status means an attempted operation no longer matches the bridge allow-list or Odoo endpoint contract. An incompatible-response status means Odoo returned a different safe shape than expected. Record the extension version, Odoo version, browser/version, sanitized compatibility code, and steps using a demo record. Follow the Odoo 19.x or 20 validation process in [ODOO_COMPATIBILITY.md](ODOO_COMPATIBILITY.md). Never attach raw network responses or real customer data.
+An incompatible-endpoint connection status means the Odoo session endpoint no longer matches the bridge contract. An incompatible-response connection status means Odoo returned session information in a shape the extension cannot safely verify. Feature-specific compatibility errors remain inside the affected feature instead of replacing the general connection state. Record the extension version, Odoo version, browser/version, sanitized connection code, and steps using a demo record. Follow the Odoo 19.x or 20 validation process in [ODOO_COMPATIBILITY.md](ODOO_COMPATIBILITY.md). Never attach raw network responses or real customer data.
 
 ## Build or packaging failure
 

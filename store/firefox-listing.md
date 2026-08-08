@@ -14,7 +14,7 @@ OdooHealthExtCS version 1 is an internal productivity extension that adds focuse
 
 The compact Odoo-style fields appear directly above Order Date. Account health sets High, Medium, or Low, clears the active value, preserves unrelated tags, and safely cleans duplicate health tags on the next selection. The inline Industry dropdown searches Odoo's live choices and updates the exact customer linked to the subscription without navigating away. Health and Industry success confirmations can be hidden independently while errors and warnings remain visible.
 
-The interface supports keyboard navigation, immediate optimistic updates with visible rollback on failure, light and dark appearance, sanitized status messages, and a seven-second Undo that refuses to overwrite a later change. Users can disable the entire extension or either feature from the popup.
+The interface supports keyboard navigation, immediate optimistic updates with visible rollback on failure, light and dark appearance, sanitized status messages, and a seven-second Undo that refuses to overwrite a later change. Users can disable the entire extension or either feature from the popup. The connection card can show the current Odoo user's name or login so the user can confirm which account is active; that label remains only in the active tab's memory and is never stored or shared.
 
 It runs only on `https://www.odoo.com/odoo*`, uses the current Odoo session, and sends no Odoo page data to external services. It is not an installable Odoo module and is not an official Odoo product.
 
@@ -34,7 +34,7 @@ It runs only on `https://www.odoo.com/odoo*`, uses the current Odoo session, and
 
 Required data collection: none.
 
-The extension processes Odoo fields in the browser and sends user-requested changes only to `www.odoo.com` through the existing same-origin session. It does not collect or transmit data to the developer or any third party and does not contain analytics, advertising, tracking, or remote executable code.
+The extension processes Odoo fields in the browser and sends user-requested changes only to `www.odoo.com` through the existing same-origin session. Settings may show the current Odoo user's name or login from the active tab, but that label remains inside the add-on and local browser, is not stored, and is not transmitted to the developer or any third party. The add-on contains no analytics, advertising, tracking, or remote executable code.
 
 ## Source-build instructions for AMO reviewers
 

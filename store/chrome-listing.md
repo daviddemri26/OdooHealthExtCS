@@ -18,7 +18,7 @@ Click the Industry value directly above Health to open a compact searchable drop
 
 The interface updates immediately, rolls back visibly if Odoo rejects an action, and works in Odoo light and dark modes. Clear success, warning, and error feedback is shown in a compact status bar. Successful writes include a seven-second Undo action that first confirms the record has not changed elsewhere. Users may hide Health and Industry success confirmations independently from Settings or directly from the confirmation itself.
 
-The popup lets each user enable or disable the extension, each feature, and Auto/Light/Dark appearance.
+The popup lets each user enable or disable the extension, each feature, and Auto/Light/Dark appearance. Its connection card shows the current Odoo user's name or login so the user can confirm which account is active; that label remains only in the active tab's memory and is never stored or shared.
 
 This is an internal productivity browser extension, not an installable Odoo module and not an official Odoo product. It runs only on `https://www.odoo.com/odoo*`, uses the user's current authenticated Odoo session, and sends no Odoo page data to external services.
 
@@ -46,11 +46,20 @@ Site access to `https://www.odoo.com/odoo*`: required to display the controls on
 ## Privacy and data-use declarations
 
 - Handles Odoo page/model data only to display current values and perform explicit user actions.
+- Handles the current Odoo user's display name or login only to show which account is connected in Settings.
 - Data is processed locally and through the existing same-origin Odoo session.
+- The connected-user label remains only in volatile tab memory and is never stored or sent to the developer or a third party.
 - No sale, advertising, analytics, tracking, profiling, or external data transfer.
 - No storage of customer records, cookies, passwords, CSRF/session values, or raw server errors.
 - No remotely hosted executable code.
 - No use unrelated to the extension's single purpose.
+
+Chrome Privacy practices selection for the connected-user display:
+
+- Select **Personally identifiable information** because Chrome includes names, usernames, and email addresses even when processed only locally.
+- Declare that it is used only for the user-facing connected-account indicator.
+- Declare no sale, external transfer, advertising, analytics, profiling, or storage of that label.
+- Keep all three Limited Use certifications selected.
 
 ## URLs
 
