@@ -1,0 +1,83 @@
+name: Submit Firefox Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing validated GitHub Release tag to submit to AMO
+        required: true
+        default: v1.1.0
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firefox-amo-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    if: ${{ vars.FIREFOX_PUBLISH_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: firefox-amo
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.9.0
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: release
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          pnpm exec node scripts/verify-release-state.mjs release "$RELEASE_TAG"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release download "$RELEASE_TAG" --dir artifacts
+      - env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          cd artifacts
+          sha256sum --check checksums.sha256
+          node -e 'const fs=require("node:fs"); const manifest=JSON.parse(fs.readFileSync("release-manifest.json","utf8")); if (manifest.version !== process.env.RELEASE_VERSION) throw new Error(`Release manifest version ${manifest.version} does not match ${process.env.RELEASE_VERSION}.`);'
+      - env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir firefox-release
+          unzip -q "artifacts/OdooHealthExtCS-v${RELEASE_VERSION}-firefox.zip" -d firefox-release
+      - env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          test -n "$WEB_EXT_API_KEY"
+          test -n "$WEB_EXT_API_SECRET"
+          pnpm exec web-ext sign \
+            --source-dir firefox-release \
+            --artifacts-dir signed \
+            --channel listed \
+            --amo-metadata store/firefox-submission.json \
+            --api-key "$WEB_EXT_API_KEY" \
+            --api-secret "$WEB_EXT_API_SECRET" \
+            --upload-source-code "artifacts/OdooHealthExtCS-v${{ steps.release.outputs.version }}-source.zip" \
+            --no-input
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firefox-signed-${{ steps.release.outputs.tag }}
+          path: signed/*
+          if-no-files-found: error
+          retention-days: 30
+      - run: |
+          echo "## Firefox submission" >> "$GITHUB_STEP_SUMMARY"
+          echo "Submitted ${{ steps.release.outputs.tag }} from its validated GitHub Release assets." >> "$GITHUB_STEP_SUMMARY"
+          echo "AMO listing: https://addons.mozilla.org/en-US/firefox/addon/odoohealthextcs/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review status: https://addons.mozilla.org/developers/addons" >> "$GITHUB_STEP_SUMMARY"

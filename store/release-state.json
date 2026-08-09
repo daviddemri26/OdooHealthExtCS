@@ -12,7 +12,8 @@
     "firefox": {
       "addonId": "odoo-health-ext-cs@daviddemri26.github.io",
       "listingUrl": "https://addons.mozilla.org/en-US/firefox/addon/odoohealthextcs/",
-      "status": "pending-review"
+      "status": "published",
+      "publishedAt": "2026-08-09"
     }
   }
 }

@@ -21,7 +21,7 @@
   "version": {
     "license": "MIT",
     "release_notes": {
-      "en-US": "Version 1 introduces Odoo-aligned account-health controls, a searchable inline industry dropdown, immediate feedback with safe rollback, configurable confirmations, safe Undo, and light/dark appearance."
+      "en-US": "Version 1.1 adds a larger tabbed control panel with dedicated Connection, Settings, Account Health, and Industry pages. It also adds general Odoo connection status, the connected user's display name in volatile memory, refined privacy information, and clearer feature settings. The inline shortcuts remain limited to In Progress subscriptions."
     },
     "approval_notes": "Built from the attached human-readable source archive with Node 22 and pnpm 10. The web-ext static innerHTML notices originate in the generated React runtime; extension source does not use dangerouslySetInnerHTML or process untrusted HTML."
   }

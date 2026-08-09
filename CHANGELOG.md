@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Added a protected Firefox recovery workflow that verifies and submits immutable GitHub Release assets to the approved AMO listing without moving a tag or affecting Chrome.
+- Added direct Chrome Web Store and Firefox Add-ons download buttons to the public product page.
+
+### Changed
+
+- Marked the approved Firefox 1.0.0 listing as eligible for automatic updates from future version tags.
+
 ## [1.1.0] - 2026-08-08
 
 ### Changed

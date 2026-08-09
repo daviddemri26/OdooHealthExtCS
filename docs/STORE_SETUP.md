@@ -35,10 +35,12 @@ The public Firefox add-on ID is versioned in both `wxt.config.ts` and `store/rel
 4. In GitHub environment `firefox-amo`, add `AMO_API_KEY` and `AMO_API_SECRET`.
 5. Set repository Actions variable `FIREFOX_PUBLISH_ENABLED=true` after the listing and first-version workflow are accepted.
 
+Firefox 1.0.0 was approved on August 9, 2026. After completing steps 3–5, run the protected **Submit Firefox Release** workflow once with `v1.1.0` to submit the existing validated release. Later version tags submit to Firefox automatically through the main release workflow.
+
 Never paste `AMO_API_SECRET` into repository files, issue comments, workflow logs, or chat. Enter it directly in the protected GitHub environment.
 
 Reference: [current `web-ext` command documentation](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/).
 
 ## Independence and protections
 
-Each store environment can require a reviewer and is enabled independently. Store secrets are never available to pull requests or the build job. Version tags are the only trigger for store jobs, at least one store must have completed its initial publication, and each store job checks its own published status before running. Concurrency never cancels an active release, and Chrome refuses a new upload while a prior submission is pending.
+Each store environment can require a reviewer and is enabled independently. Store secrets are never available to pull requests or the build job. Version tags are the normal trigger for store jobs, at least one store must have completed its initial publication, and each store job checks its own published status before running. The protected Firefox recovery workflow may submit an existing validated GitHub Release without changing its tag. Concurrency never cancels an active release, and Chrome refuses a new upload while a prior submission is pending.
