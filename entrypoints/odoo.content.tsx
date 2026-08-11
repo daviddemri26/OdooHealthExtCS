@@ -4,6 +4,7 @@ import { browser } from 'wxt/browser';
 import { ContentApp } from '../src/content/ContentApp';
 import { attachPanelHost, createExtensionHost } from '../src/content/host';
 import contentStyles from '../src/content/styles.css?inline';
+import { SubscriptionListHealthPreview } from '../src/features/health/list-preview';
 import {
   hasInProgressSubscriptionBadge,
   isRenderedSubscriptionForm,
@@ -74,9 +75,11 @@ export default defineContentScript({
       contentStyles,
     );
     const gateway = new PageContextOdooGateway();
+    const listHealthPreview = new SubscriptionListHealthPreview(gateway);
 
     const root: Root = createRoot(container);
     let settings: ExtensionSettings = DEFAULT_SETTINGS;
+    let settingsReady = false;
     let lastHref = window.location.href;
     let scheduled = 0;
     let connectionCheckSequence = 0;
@@ -107,6 +110,7 @@ export default defineContentScript({
 
     const render = (): void => {
       const route = getActiveRoute();
+      void listHealthPreview.sync(settingsReady && settings.enabled && settings.healthListPreview);
       if (route) attachPanelHost(panelHost);
       else panelHost.style.display = 'none';
       root.render(
@@ -141,6 +145,7 @@ export default defineContentScript({
       } catch {
         settings = DEFAULT_SETTINGS;
       }
+      settingsReady = true;
       renderNow();
     };
 
@@ -156,12 +161,14 @@ export default defineContentScript({
     const routeInterval = window.setInterval(() => {
       if (window.location.href === lastHref) return;
       lastHref = window.location.href;
+      listHealthPreview.invalidate();
       scheduleRender();
       void refreshConnectionStatus();
     }, 500);
 
     const unsubscribe = subscribeToSettings((nextSettings) => {
       settings = nextSettings;
+      settingsReady = true;
       renderNow();
     });
 
@@ -193,8 +200,12 @@ export default defineContentScript({
     };
     browser.runtime.onMessage.addListener(handleRuntimeMessage);
 
-    window.addEventListener('popstate', scheduleRender);
-    window.addEventListener('hashchange', scheduleRender);
+    const handleSpaNavigation = (): void => {
+      listHealthPreview.invalidate();
+      scheduleRender();
+    };
+    window.addEventListener('popstate', handleSpaNavigation);
+    window.addEventListener('hashchange', handleSpaNavigation);
     window.addEventListener('resize', scheduleRender);
     const colorScheme = matchMedia('(prefers-color-scheme: dark)');
     colorScheme.addEventListener('change', scheduleRender);
@@ -207,14 +218,15 @@ export default defineContentScript({
     ctx.onInvalidated(() => {
       active = false;
       connectionCheckSequence += 1;
+      listHealthPreview.destroy();
       gateway.dispose();
       observer.disconnect();
       window.clearInterval(routeInterval);
       window.clearTimeout(scheduled);
       unsubscribe();
       browser.runtime.onMessage.removeListener(handleRuntimeMessage);
-      window.removeEventListener('popstate', scheduleRender);
-      window.removeEventListener('hashchange', scheduleRender);
+      window.removeEventListener('popstate', handleSpaNavigation);
+      window.removeEventListener('hashchange', handleSpaNavigation);
       window.removeEventListener('resize', scheduleRender);
       window.removeEventListener('online', handleOnline);
       colorScheme.removeEventListener('change', scheduleRender);

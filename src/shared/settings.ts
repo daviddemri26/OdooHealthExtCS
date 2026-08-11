@@ -2,12 +2,16 @@ import { browser } from 'wxt/browser';
 
 import type { ExtensionSettings } from './types';
 
-export const SETTINGS_STORAGE_KEY = 'odooHealthExtCsSettingsV2';
-const LEGACY_SETTINGS_STORAGE_KEY = 'odooHealthExtCsSettingsV1';
+export const SETTINGS_STORAGE_KEY = 'odooHealthExtCsSettingsV3';
+const LEGACY_SETTINGS_STORAGE_KEYS = [
+  'odooHealthExtCsSettingsV2',
+  'odooHealthExtCsSettingsV1',
+] as const;
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   enabled: true,
+  healthListPreview: false,
   features: {
     health: true,
     industry: true,
@@ -34,8 +38,12 @@ export function normalizeSettings(value: unknown): ExtensionSettings {
   const successToasts = isRecord(value.successToasts) ? value.successToasts : {};
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     enabled: booleanOrDefault(value.enabled, DEFAULT_SETTINGS.enabled),
+    healthListPreview: booleanOrDefault(
+      value.healthListPreview,
+      DEFAULT_SETTINGS.healthListPreview,
+    ),
     features: {
       health: booleanOrDefault(features.health, DEFAULT_SETTINGS.features.health),
       industry: booleanOrDefault(features.industry, DEFAULT_SETTINGS.features.industry),
@@ -53,11 +61,14 @@ export function normalizeSettings(value: unknown): ExtensionSettings {
 export async function getSettings(): Promise<ExtensionSettings> {
   const stored = await browser.storage.sync.get([
     SETTINGS_STORAGE_KEY,
-    LEGACY_SETTINGS_STORAGE_KEY,
+    ...LEGACY_SETTINGS_STORAGE_KEYS,
   ]);
   const current = stored[SETTINGS_STORAGE_KEY];
-  const settings = normalizeSettings(current ?? stored[LEGACY_SETTINGS_STORAGE_KEY]);
-  if (current === undefined && stored[LEGACY_SETTINGS_STORAGE_KEY] !== undefined) {
+  const legacy = LEGACY_SETTINGS_STORAGE_KEYS.map((key) => stored[key]).find(
+    (value) => value !== undefined,
+  );
+  const settings = normalizeSettings(current ?? legacy);
+  if (current === undefined && legacy !== undefined) {
     await browser.storage.sync.set({ [SETTINGS_STORAGE_KEY]: settings });
   }
   return settings;

@@ -40,6 +40,16 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Access errors, expired session, missing fields, and failed writes are sanitized.
 - [ ] Undo works within seven seconds and refuses after an external change.
 
+## Subscription-list health preview
+
+- [ ] The preview is disabled by default and can be enabled independently from the Account Health form shortcut.
+- [ ] Only a structurally complete Odoo subscription list is accepted; generic lists, forms, Kanban views, and incomplete signatures are rejected.
+- [ ] Customer columns in different positions receive exactly one 3-pixel marker; grouping and total rows remain untouched.
+- [ ] A light gray marker reserves the layout before the bounded read completes, and the same element transitions to High, Medium, Low, or gray without shifting customer text.
+- [ ] Not set, duplicate health tags, duplicate subscription names, missing records, and unsafe responses fail to the documented gray or closed state.
+- [ ] Filters, sorting, pagination, grouping, Odoo SPA navigation, and row replacement refresh the visible markers without duplication.
+- [ ] Disabling the setting, pausing the extension, leaving the list, or destroying the content script removes markers immediately.
+
 ## Industry
 
 - [ ] Inline field reads the exact subscription `partner_id`, including contact/company distinctions.
@@ -67,6 +77,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Success and error status messages use a colored outline, a prominent primary line, and dismiss automatically; Health confirmation explains the delayed native Tags-widget refresh.
 - [ ] Hovering a status message pauses its dismissal timer; leaving resumes from the remaining time.
 - [ ] Each feature's success toast is enabled by default, can be disabled in Settings, and can disable itself through “Don't show again” without suppressing errors or warnings.
+- [ ] The independent list-preview setting appears in its own Account Health card between the form options and the save explanation.
 - [ ] The inline panel remains absent during initial reads and fades in only after all enabled feature reads settle.
 - [ ] The panel appears on equivalent Chrome and Firefox subscription forms, including forms where Odoo renders only the `h1` contract title.
 - [ ] Success, error, warning, and info messages all disappear automatically at their documented durations.
@@ -76,12 +87,12 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 ## Release and privacy
 
 - [ ] `pnpm release:status` matches the observed initial-publication state of both stores.
-- [ ] While neither initial 1.0.0 submission is published, `package.json` remains at 1.0.0 and no release tag exists.
-- [ ] Before preparing 1.0.1 or later, at least one verified initial listing is marked `published` in a reviewed commit.
-- [ ] A store job remains skipped until that store's own initial 1.0.0 listing is published, even if its Actions enable variable is accidentally true.
+- [ ] The public Chrome and Firefox versions are checked before preparing a replacement release.
+- [ ] Both store states are `published` and their protected publication variables are intentionally enabled before a shared tagged release.
+- [ ] The Chrome preflight refuses to replace a pending review, staged upload, policy warning, or takedown.
 - [ ] Final icon is legible at 16 px and the canonical SVG is approved.
 - [ ] Public docs, screenshots, sources, and archives contain no captures, customer information, session data, secrets, or remote executable code.
 - [ ] Pages URLs load and store copy matches current behavior.
 - [ ] Tag, package, and both manifest versions match.
 - [ ] GitHub Release assets are permanent; enabled store submissions are recorded.
-- [ ] No tag or store submission is created until read-only checks pass in both browsers and controlled writes pass on an approved noncritical record.
+- [ ] No tag or store submission is created until read-only checks pass in both browsers and any materially changed write path passes on an approved noncritical record.

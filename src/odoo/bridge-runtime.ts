@@ -129,6 +129,26 @@ function sanitizeNamedRecords(value: unknown): { id: number; name: string }[] {
   });
 }
 
+function sanitizeSubscriptionListRecords(
+  value: unknown,
+): { id: number; name: string; tag_ids: number[] }[] {
+  if (!Array.isArray(value)) throw bridgeFailure('incompatible_response');
+  return value.map((record) => {
+    if (
+      !isRecord(record) ||
+      !isPositiveId(record.id) ||
+      typeof record.name !== 'string' ||
+      record.name.length === 0 ||
+      record.name.length > 160 ||
+      !Array.isArray(record.tag_ids) ||
+      !record.tag_ids.every(isPositiveId)
+    ) {
+      throw bridgeFailure('incompatible_response');
+    }
+    return { id: record.id, name: record.name, tag_ids: [...record.tag_ids] };
+  });
+}
+
 function sanitizeResult(call: OdooBridgeCall, result: unknown): unknown {
   if (call.method === 'write') {
     if (typeof result !== 'boolean') throw bridgeFailure('incompatible_response');
@@ -139,7 +159,11 @@ function sanitizeResult(call: OdooBridgeCall, result: unknown): unknown {
     const field = call.model === 'sale.order' ? 'tag_ids' : 'industry_id';
     return { [field]: sanitizeFieldDefinition(result[field]) };
   }
-  if (call.method === 'search_read') return sanitizeNamedRecords(result);
+  if (call.method === 'search_read') {
+    return call.model === 'sale.order'
+      ? sanitizeSubscriptionListRecords(result)
+      : sanitizeNamedRecords(result);
+  }
   if (call.method === 'read') return sanitizeRecordResult(call, result);
   throw bridgeFailure('incompatible_endpoint');
 }

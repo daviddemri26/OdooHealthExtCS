@@ -398,15 +398,19 @@ function FeaturePanel({
   feature,
   enabled,
   extensionEnabled,
+  healthListPreview,
   successToast,
   onEnabledChange,
+  onHealthListPreviewChange,
   onSuccessToastChange,
 }: {
   feature: 'health' | 'industry';
   enabled: boolean;
   extensionEnabled: boolean;
+  healthListPreview: boolean;
   successToast: boolean;
   onEnabledChange: (checked: boolean) => void;
+  onHealthListPreviewChange: (checked: boolean) => void;
   onSuccessToastChange: (checked: boolean) => void;
 }): React.JSX.Element {
   const item = NAVIGATION_ITEMS.find((candidate) => candidate.id === feature)!;
@@ -447,6 +451,21 @@ function FeaturePanel({
           onChange={onSuccessToastChange}
         />
       </section>
+
+      {isHealth ? (
+        <section
+          className="options-card standalone-option-card"
+          aria-label="Subscription list health preview settings"
+        >
+          <Switch
+            checked={healthListPreview}
+            disabled={!extensionEnabled}
+            label="Show health in subscription lists"
+            description="Display a color indicator beside each customer in subscription lists."
+            onChange={onHealthListPreviewChange}
+          />
+        </section>
+      ) : null}
 
       <section className="save-explanation" aria-label="How changes are saved">
         <span className="save-explanation-mark" aria-hidden="true">
@@ -649,7 +668,12 @@ export function Popup(): React.JSX.Element {
           <div className="navigation-group feature-navigation">
             <span className="navigation-label">Features</span>
             {NAVIGATION_ITEMS.slice(2).map((item) => {
-              const enabled = settings.features[item.id as keyof ExtensionSettings['features']];
+              const featureEnabled =
+                settings.features[item.id as keyof ExtensionSettings['features']];
+              const enabled =
+                item.id === 'health'
+                  ? featureEnabled || settings.healthListPreview
+                  : featureEnabled;
               const stateLabel = !settings.enabled ? 'Paused' : enabled ? 'Enabled' : 'Disabled';
               return (
                 <button
@@ -698,8 +722,12 @@ export function Popup(): React.JSX.Element {
                 feature={activePanel}
                 enabled={settings.features[activePanel]}
                 extensionEnabled={settings.enabled}
+                healthListPreview={settings.healthListPreview}
                 successToast={settings.successToasts[activePanel]}
                 onEnabledChange={(checked) => updateFeature(activePanel, checked)}
+                onHealthListPreviewChange={(checked) =>
+                  setSettings((current) => ({ ...current, healthListPreview: checked }))
+                }
                 onSuccessToastChange={(checked) => updateSuccessToast(activePanel, checked)}
               />
             )}

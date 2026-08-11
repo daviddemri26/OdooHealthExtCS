@@ -8,10 +8,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Added a protected Firefox recovery workflow that verifies and submits immutable GitHub Release assets to the approved AMO listing without moving a tag or affecting Chrome.
 - Added direct Chrome Web Store and Firefox Add-ons download buttons to the public product page.
+- Added an optional account-health preview to recognized Odoo subscription lists, with High, Medium, Low, unset, and ambiguous indicators beside the Customer value.
+- Added an independent, disabled-by-default Account Health setting for the subscription-list preview.
 
 ### Changed
 
 - Marked the approved Firefox 1.0.0 listing as eligible for automatic updates from future version tags.
+- Detect subscription lists from stable Odoo view and field structure instead of URL paths, including reordered Customer columns, grouped lists, pagination, filters, and SPA rerenders.
+- Reserve the list-indicator space immediately with a light loading marker, then transition the same marker to its resolved color without shifting customer names.
+
+### Security
+
+- Extended the Odoo bridge with a strictly allow-listed, bounded `sale.order.search_read` contract that returns only `id`, `name`, and `tag_ids` for visible subscription names.
 
 ## [1.1.0] - 2026-08-08
 

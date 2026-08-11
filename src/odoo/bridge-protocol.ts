@@ -1,8 +1,9 @@
 import type { CompatibilityCode } from '../shared/types';
 
 export const ODOO_BRIDGE_CHANNEL = 'odoo-health-ext-cs:rpc';
-export const ODOO_BRIDGE_VERSION = 2 as const;
+export const ODOO_BRIDGE_VERSION = 3 as const;
 export const ODOO_BRIDGE_ORIGIN = 'https://www.odoo.com';
+export const MAX_SUBSCRIPTION_LIST_BATCH = 100;
 
 export const CANONICAL_HEALTH_NAMES = ['Health - High', 'Health - Medium', 'Health - Low'] as const;
 
@@ -127,6 +128,13 @@ function isEmptyRecord(value: unknown): value is Record<string, never> {
   return isRecord(value) && Object.keys(value).length === 0;
 }
 
+function hasControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+  });
+}
+
 function isAllowedFieldsGet(call: OdooBridgeCall): boolean {
   if (call.method !== 'fields_get' || call.args.length !== 0) return false;
   if (!hasExactKeys(call.kwargs, ['allfields', 'attributes'])) return false;
@@ -171,6 +179,37 @@ function isHealthDomain(value: unknown): boolean {
   );
 }
 
+function getSubscriptionListNames(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length !== 1) return null;
+  const clause = value[0];
+  if (
+    !Array.isArray(clause) ||
+    clause.length !== 3 ||
+    clause[0] !== 'name' ||
+    clause[1] !== 'in' ||
+    !Array.isArray(clause[2]) ||
+    clause[2].length === 0 ||
+    clause[2].length > MAX_SUBSCRIPTION_LIST_BATCH
+  ) {
+    return null;
+  }
+  const names = clause[2];
+  if (
+    !names.every(
+      (name) =>
+        typeof name === 'string' &&
+        name.length > 0 &&
+        name.length <= 160 &&
+        name.trim() === name &&
+        !hasControlCharacters(name),
+    ) ||
+    new Set(names).size !== names.length
+  ) {
+    return null;
+  }
+  return names as string[];
+}
+
 function isAllowedSearchRead(call: OdooBridgeCall): boolean {
   if (call.method !== 'search_read' || call.args.length !== 1) return false;
   if (call.model === 'crm.tag') {
@@ -179,6 +218,15 @@ function isAllowedSearchRead(call: OdooBridgeCall): boolean {
       hasExactKeys(call.kwargs, ['fields', 'limit']) &&
       hasExactStringArray(call.kwargs.fields, ['id', 'name']) &&
       call.kwargs.limit === 20
+    );
+  }
+  if (call.model === 'sale.order') {
+    const names = getSubscriptionListNames(call.args[0]);
+    return Boolean(
+      names &&
+      hasExactKeys(call.kwargs, ['fields', 'limit']) &&
+      hasExactStringArray(call.kwargs.fields, ['id', 'name', 'tag_ids']) &&
+      call.kwargs.limit === names.length * 2,
     );
   }
   return (

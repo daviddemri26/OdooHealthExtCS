@@ -10,11 +10,13 @@ Faster account health and customer industry updates for authorized Odoo Customer
 
 ## Description
 
-OdooHealthExtCS version 1 is an internal productivity extension that adds focused account-health and customer-industry controls to In Progress Odoo subscription records. The controls stay hidden on quotations, closed subscriptions, and every other status.
+OdooHealthExtCS is an internal productivity extension that adds focused account-health and customer-industry controls to In Progress Odoo subscription records. The interactive controls stay hidden on quotations, closed subscriptions, and every other status.
 
 The compact Odoo-style fields appear directly above Order Date. Account health sets High, Medium, or Low, clears the active value, preserves unrelated tags, and safely cleans duplicate health tags on the next selection. The inline Industry dropdown searches Odoo's live choices and updates the exact customer linked to the subscription without navigating away. Health and Industry success confirmations can be hidden independently while errors and warnings remain visible.
 
-The interface supports keyboard navigation, immediate optimistic updates with visible rollback on failure, light and dark appearance, sanitized status messages, and a seven-second Undo that refuses to overwrite a later change. Users can disable the entire extension or either feature from the popup. The connection card can show the current Odoo user's name or login so the user can confirm which account is active; that label remains only in the active tab's memory and is never stored or shared.
+An independent, disabled-by-default setting can show a compact health-color indicator beside each customer in recognized Odoo subscription lists. The read-only preview identifies eligible lists from stable Odoo structure rather than URL text, follows moved columns and SPA rerenders, and reserves its layout with a light marker while visible data loads.
+
+The interface supports keyboard navigation, immediate optimistic updates with visible rollback on failure, light and dark appearance, sanitized status messages, and a seven-second Undo that refuses to overwrite a later change. Users can disable the entire extension, either interactive feature, or the independent list preview from the popup. The connection card can show the current Odoo user's name or login so the user can confirm which account is active; that label remains only in the active tab's memory and is never stored or shared.
 
 It runs only on `https://www.odoo.com/odoo*`, uses the current Odoo session, and sends no Odoo page data to external services. It is not an installable Odoo module and is not an official Odoo product.
 
@@ -34,7 +36,7 @@ It runs only on `https://www.odoo.com/odoo*`, uses the current Odoo session, and
 
 Required data collection: none.
 
-The extension processes Odoo fields in the browser and sends user-requested changes only to `www.odoo.com` through the existing same-origin session. Settings may show the current Odoo user's name or login from the active tab, but that label remains inside the add-on and local browser, is not stored, and is not transmitted to the developer or any third party. The add-on contains no analytics, advertising, tracking, or remote executable code.
+The extension processes Odoo fields in the browser, including bounded reads of visible subscription names and health tags when the optional list preview is enabled, and sends user-requested changes only to `www.odoo.com` through the existing same-origin session. Settings may show the current Odoo user's name or login from the active tab, but that label remains inside the add-on and local browser, is not stored, and is not transmitted to the developer or any third party. The add-on contains no analytics, advertising, tracking, or remote executable code.
 
 ## Source-build instructions for AMO reviewers
 

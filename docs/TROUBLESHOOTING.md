@@ -24,6 +24,10 @@ For a general connection status, confirm that the current account can access the
 
 The extension requires one unique exact match for each canonical tag: `Health - High`, `Health - Medium`, and `Health - Low`. A missing tag or multiple records with the same canonical name disables writes. Correct the Odoo tag configuration, then reload. Do not rename tags in code or select a visually similar tag.
 
+## Subscription-list health colors do not appear
+
+The list preview is disabled by default. Open Account Health settings, enable **Show health in subscription lists**, and reload the Odoo tab after installing or updating the extension. The preview appears only in a native Odoo list controller containing the technical fields `name`, `partner_id`, `subscription_state`, and at least one recognized subscription field. It intentionally stays absent from generic lists, forms, Kanban views, grouped headers, and total rows. A very light gray marker may appear briefly while the visible subscriptions are read; if Odoo denies or returns an unsafe response, the preview fails closed.
+
 ## Industry is unavailable or empty
 
 Confirm the subscription has a valid `partner_id`, `res.partner.industry_id` exists and is accessible, and industry records are readable. The list is loaded dynamically from Odoo. A missing field or changed relation is treated as a compatibility problem.

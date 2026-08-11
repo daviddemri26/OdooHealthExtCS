@@ -2,7 +2,7 @@
 
 ## Supported baseline
 
-Version 1.0 targets the `www.odoo.com` Odoo 19.3 web client and its current `sale.order` subscription forms. Chrome/Chromium and Firefox Manifest V3 packages are built from the same source. Firefox 142 or later is required so the manifest can declare Mozilla's mandatory no-data-collection metadata.
+The current release targets the `www.odoo.com` Odoo 19.3 web client and its current `sale.order` subscription forms and lists. Chrome/Chromium and Firefox Manifest V3 packages are built from the same source. Firefox 142 or later is required so the manifest can declare Mozilla's mandatory no-data-collection metadata.
 
 The extension relies on stable model semantics rather than copied DOM values:
 
@@ -14,11 +14,11 @@ The extension relies on stable model semantics rather than copied DOM values:
 
 The isolated UI never calls Odoo directly. A versioned page bridge accepts only the exact Health and Industry operations documented in [ARCHITECTURE.md](ARCHITECTURE.md), validates them before fetch, and sanitizes results before returning them. Compatibility also requires Chrome and Firefox to preserve Manifest V3 `MAIN`-world content-script support.
 
-The route and form checks use several signals so minor web-client layout changes do not automatically enable writes on the wrong model.
+The route and form checks use several signals so minor web-client layout changes do not automatically enable writes on the wrong model. The list preview is read-only and requires the complete documented list-controller and technical-field signature instead of relying on URL text or column position.
 
 ## Future Odoo 19.x releases
 
-For each 19.x release, run the complete QA checklist in both browsers. Confirm the bridge handshake, exact request allow-list, direct and nested subscription routes, field metadata, canonical tags, industry relation, permission behavior, light/dark rendering, and SPA navigation. If a DOM anchor changes but the model contract is intact, update the anchor selector without widening route scope.
+For each 19.x release, run the complete QA checklist in both browsers. Confirm the bridge handshake, exact request allow-list, direct and nested subscription routes, list-view structural signature, reordered columns, grouped rows, pagination and filters, field metadata, canonical tags, industry relation, permission behavior, light/dark rendering, and SPA navigation. If a DOM anchor changes but the model contract is intact, update the anchor selector without widening route or list eligibility.
 
 ## Odoo 20
 

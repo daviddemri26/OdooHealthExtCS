@@ -95,6 +95,37 @@ describe('MAIN-world Odoo bridge runtime', () => {
     });
   });
 
+  it('sanitizes the bounded subscription list health response', async () => {
+    const listCall: OdooBridgeCall = {
+      model: 'sale.order',
+      method: 'search_read',
+      args: [[['name', 'in', ['SO2026/1']]]],
+      kwargs: { fields: ['id', 'name', 'tag_ids'], limit: 2 },
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        jsonrpc: '2.0',
+        id: null,
+        result: [
+          {
+            id: 42,
+            name: 'SO2026/1',
+            tag_ids: [11, 90],
+            amount_total: 999,
+            partner_id: [8, 'Private'],
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      executeOdooBridgeCall(listCall, { fetcher, origin: ODOO_BRIDGE_ORIGIN }),
+    ).resolves.toEqual({
+      ok: true,
+      result: [{ id: 42, name: 'SO2026/1', tag_ids: [11, 90] }],
+    });
+  });
+
   it('returns only the sanitized display name needed by the live connection UI', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({

@@ -1,5 +1,6 @@
 import type { HealthState, Many2OneValue, OdooGateway, OdooRecord } from '../../shared/types';
 import { OdooGatewayError } from '../../odoo/gateway';
+import { MAX_SUBSCRIPTION_LIST_BATCH } from '../../odoo/bridge-protocol';
 
 export const HEALTH_TAG_NAMES: Record<Exclude<HealthState, null>, string> = {
   high: 'Health - High',
@@ -16,6 +17,13 @@ interface SaleOrderRecord extends OdooRecord {
 interface TagRecord extends OdooRecord {
   name: string;
 }
+
+interface SubscriptionListRecord extends OdooRecord {
+  name: string;
+  tag_ids: number[];
+}
+
+export type ListHealthIndicatorState = Exclude<HealthState, null> | 'not-set' | 'ambiguous';
 
 export interface HealthTagMap {
   high: number;
@@ -130,6 +138,65 @@ export async function loadHealthContext(
     );
   }
   return { tags, snapshot: getHealthSnapshot(order.tag_ids, tags) };
+}
+
+export async function loadSubscriptionListHealth(
+  gateway: OdooGateway,
+  orderNames: string[],
+  resolvedTags?: HealthTagMap,
+): Promise<Map<string, ListHealthIndicatorState>> {
+  const names = Array.from(new Set(orderNames));
+  if (names.length === 0) return new Map();
+
+  const tags = resolvedTags ?? (await resolveHealthTags(gateway));
+  const batches: string[][] = [];
+  for (let index = 0; index < names.length; index += MAX_SUBSCRIPTION_LIST_BATCH) {
+    batches.push(names.slice(index, index + MAX_SUBSCRIPTION_LIST_BATCH));
+  }
+  const records = (
+    await Promise.all(
+      batches.map((batch) =>
+        gateway.searchRead<SubscriptionListRecord>(
+          'sale.order',
+          [['name', 'in', batch]],
+          ['id', 'name', 'tag_ids'],
+          { limit: batch.length * 2 },
+        ),
+      ),
+    )
+  ).flat();
+
+  for (const record of records) {
+    if (
+      !Number.isSafeInteger(record.id) ||
+      record.id <= 0 ||
+      typeof record.name !== 'string' ||
+      !Array.isArray(record.tag_ids) ||
+      !record.tag_ids.every((id) => Number.isSafeInteger(id) && id > 0)
+    ) {
+      throw new OdooGatewayError(
+        'incompatible_response',
+        'The subscription list health response could not be read safely.',
+      );
+    }
+  }
+
+  const recordsByName = new Map<string, SubscriptionListRecord[]>();
+  for (const record of records) {
+    const matches = recordsByName.get(record.name) ?? [];
+    matches.push(record);
+    recordsByName.set(record.name, matches);
+  }
+
+  return new Map(
+    names.map((name) => {
+      const matches = recordsByName.get(name) ?? [];
+      if (matches.length !== 1 || !matches[0]) return [name, 'ambiguous'] as const;
+      const snapshot = getHealthSnapshot(matches[0].tag_ids, tags);
+      if (snapshot.duplicate) return [name, 'ambiguous'] as const;
+      return [name, snapshot.state ?? 'not-set'] as const;
+    }),
+  );
 }
 
 export async function applyHealthChange(

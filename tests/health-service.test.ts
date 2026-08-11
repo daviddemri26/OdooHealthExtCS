@@ -4,6 +4,7 @@ import {
   applyHealthChange,
   getHealthSnapshot,
   loadHealthContext,
+  loadSubscriptionListHealth,
   prepareHealthTagIds,
   resolveHealthTags,
   undoHealthChange,
@@ -61,6 +62,43 @@ describe('account health service', () => {
     await expect(loadHealthContext(gateway, 42)).resolves.toMatchObject({
       snapshot: { state: 'low', tagIds: [5, 13] },
     });
+  });
+
+  it('maps visible subscriptions to list indicator states', async () => {
+    const gateway = new MockGateway();
+    gateway.searches['sale.order'] = [
+      { id: 1, name: 'SO/1', tag_ids: [11] },
+      { id: 2, name: 'SO/2', tag_ids: [] },
+      { id: 3, name: 'SO/3', tag_ids: [11, 13] },
+      { id: 4, name: 'SO/4', tag_ids: [12] },
+      { id: 5, name: 'SO/4', tag_ids: [13] },
+    ];
+
+    await expect(
+      loadSubscriptionListHealth(gateway, ['SO/1', 'SO/2', 'SO/3', 'SO/4', 'SO/5'], tags),
+    ).resolves.toEqual(
+      new Map([
+        ['SO/1', 'high'],
+        ['SO/2', 'not-set'],
+        ['SO/3', 'ambiguous'],
+        ['SO/4', 'ambiguous'],
+        ['SO/5', 'ambiguous'],
+      ]),
+    );
+  });
+
+  it('reads visible subscription names in bounded batches', async () => {
+    const gateway = new MockGateway();
+    const names = Array.from({ length: 101 }, (_, index) => `SO/${index + 1}`);
+    await loadSubscriptionListHealth(gateway, names, tags);
+
+    expect(gateway.searchCalls).toHaveLength(2);
+    expect(gateway.searchCalls[0]).toMatchObject({
+      model: 'sale.order',
+      fields: ['id', 'name', 'tag_ids'],
+      options: { limit: 200 },
+    });
+    expect(gateway.searchCalls[1]).toMatchObject({ options: { limit: 2 } });
   });
 
   it('writes the complete safe tag set', async () => {

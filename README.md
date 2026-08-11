@@ -1,15 +1,16 @@
 # OdooHealthExtCS
 
-OdooHealthExtCS is the internal browser extension for the Odoo Customer Success team in San Francisco. Version 1 adds focused, production-ready shortcuts to Odoo subscription records without installing an Odoo module or changing the Odoo server.
+OdooHealthExtCS is the internal browser extension for the Odoo Customer Success team in San Francisco. It adds focused, production-ready subscription shortcuts and read-only list context without installing an Odoo module or changing the Odoo server.
 
-The extension runs only on `https://www.odoo.com/odoo*`, shows its record controls only when the visible subscription badge is **In Progress**, uses the user's existing authenticated session, and sends no Odoo data to external services.
+The extension runs only on `https://www.odoo.com/odoo*`, shows its interactive record controls only when the visible subscription badge is **In Progress**, uses the user's existing authenticated session, and sends no Odoo data to external services.
 
 ## Features
 
 - Account health: read, set, replace, or clear the canonical `Health - High`, `Health - Medium`, and `Health - Low` tags while preserving unrelated tags.
+- Subscription-list preview: optionally show a compact health-color indicator beside each visible customer in structurally recognized Odoo subscription lists.
 - Industry quick picker: search and update the exact subscription customer's industry without leaving the subscription.
 - Safe feedback: optimistic updates, light/dark status messages, optional success confirmations, and a seven-second Undo action that refuses to overwrite a later external change.
-- Personal settings: master, feature, per-feature success-confirmation, and appearance controls stored by the browser.
+- Personal settings: master, feature, independent list-preview, per-feature success-confirmation, and appearance controls stored by the browser.
 
 ## Screenshots
 
@@ -41,7 +42,7 @@ pnpm test
 pnpm validate
 ```
 
-WXT, React, and TypeScript provide one Manifest V3 codebase for Chrome/Chromium and Firefox. The UI runs in an isolated content script and lives in a Shadow DOM. A second, narrowly allow-listed `MAIN`-world bridge performs authenticated same-origin calls to `/web/dataset/call_kw`; it exposes no general-purpose RPC access. The project contains no password, API key, cookie reader, analytics client, or remotely hosted executable code.
+WXT, React, and TypeScript provide one Manifest V3 codebase for Chrome/Chromium and Firefox. Interactive UI runs in an isolated content script and lives in a Shadow DOM; the read-only list preview decorates only structurally verified native Customer cells with namespaced elements. A second, narrowly allow-listed `MAIN`-world bridge performs authenticated same-origin calls to `/web/dataset/call_kw`; it exposes no general-purpose RPC access. The project contains no password, API key, cookie reader, analytics client, or remotely hosted executable code.
 
 See [Architecture](docs/ARCHITECTURE.md), [Odoo compatibility](docs/ODOO_COMPATIBILITY.md), and [Troubleshooting](docs/TROUBLESHOOTING.md).
 
@@ -50,12 +51,12 @@ See [Architecture](docs/ARCHITECTURE.md), [Odoo compatibility](docs/ODOO_COMPATI
 ```bash
 pnpm package
 pnpm release:status
-pnpm release -- patch    # after at least one initial store version is published
+pnpm release -- minor
 ```
 
-`pnpm package` validates, tests, builds, lints, scans, and creates browser and source archives plus checksums in `artifacts/`. While the manually submitted 1.0.0 packages are under review, normal code changes continue under the unchanged 1.0.0 development version and are recorded in `CHANGELOG.md` under `Unreleased`.
+`pnpm package` validates, tests, builds, lints, scans, and creates browser and source archives plus checksums in `artifacts/`. Completed changes remain under `CHANGELOG.md` → `Unreleased` until a semantic release promotes them into a dated version.
 
-The public store IDs and initial-publication statuses live in `store/release-state.json`. Packaging remains available while both stores are pending, but version increments and release tags stay blocked until at least one initial version is published. Each store is then eligible for automated updates independently: Chrome can receive 1.0.1 while Firefox remains skipped, and Firefox joins a later shared release after its own 1.0.0 publication. Use `patch`, `minor`, or `major` to promote the accumulated Unreleased changes into the next version. `pnpm release` requires a clean, synchronized `main`.
+The public store IDs and initial-publication statuses live in `store/release-state.json`. Chrome and Firefox have both completed their initial publication and are eligible for tagged automatic updates. Use `patch`, `minor`, or `major` to promote the accumulated Unreleased changes into the next version. `pnpm release` requires a clean, synchronized `main`.
 
 Every push and pull request produces short-lived GitHub Actions packages. A `vX.Y.Z` tag creates a permanent GitHub Release and submits to each enabled store. Store jobs remain safely skipped until their protected environments are configured. Follow the [release runbook](docs/RELEASE.md).
 

@@ -43,8 +43,9 @@ import { Popup } from '../entrypoints/popup/Popup';
 const popupStyles = readFileSync(resolve('entrypoints/popup/style.css'), 'utf8');
 
 const settings = {
-  schemaVersion: 2 as const,
+  schemaVersion: 3 as const,
   enabled: true,
+  healthListPreview: true,
   features: { health: true, industry: true },
   successToasts: { health: true, industry: true },
   appearance: 'dark' as const,
@@ -89,6 +90,20 @@ describe('settings popup', () => {
     expect(screen.getByText(/Account Health is a shortcut/)).toBeInTheDocument();
     expect(screen.queryByText(/Every change updates/)).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Enable Account Health' })).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: 'Show health in subscription lists' }),
+    ).toBeChecked();
+    const listPreviewCard = screen.getByRole('region', {
+      name: 'Subscription list health preview settings',
+    });
+    const featureOptions = screen.getByRole('region', { name: 'Account Health settings' });
+    const saveExplanation = screen.getByRole('region', { name: 'How changes are saved' });
+    expect(
+      featureOptions.compareDocumentPosition(listPreviewCard) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      listPreviewCard.compareDocumentPosition(saveExplanation) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Saved directly in Odoo' })).toBeInTheDocument();
     expect(screen.getByText(/native Tags field may not visually refresh/)).toBeInTheDocument();
 
@@ -159,6 +174,34 @@ describe('settings popup', () => {
     expect(screen.getByText('Saved').closest('.save-state')).toHaveClass('save-state-saved');
   });
 
+  it('saves the subscription list preview independently from the form shortcut', async () => {
+    render(<Popup />);
+    await screen.findByText('Connected and ready');
+    fireEvent.click(screen.getByRole('button', { name: /Account Health Enabled/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Account Health' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show health in subscription lists' }));
+
+    await waitFor(() =>
+      expect(mocks.saveSettings).toHaveBeenLastCalledWith({
+        ...settings,
+        healthListPreview: false,
+        features: { health: false, industry: true },
+      }),
+    );
+  });
+
+  it('keeps Account Health enabled in navigation when only the list preview is active', async () => {
+    mocks.getSettings.mockResolvedValue({
+      ...settings,
+      features: { ...settings.features, health: false },
+    });
+    render(<Popup />);
+
+    expect(
+      await screen.findByRole('button', { name: /Account Health Enabled/ }),
+    ).toBeInTheDocument();
+  });
+
   it('keeps feature pages visible but disables their controls when the extension is paused', async () => {
     render(<Popup />);
     await screen.findByText('Connected and ready');
@@ -167,6 +210,12 @@ describe('settings popup', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Enable Industry' })).toBeDisabled();
     expect(screen.getByText(/Enable the extension from the top-right switch/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Account Health Paused/ }));
+    expect(screen.getByRole('checkbox', { name: 'Enable Account Health' })).toBeDisabled();
+    expect(
+      screen.getByRole('checkbox', { name: 'Show health in subscription lists' }),
+    ).toBeDisabled();
   });
 
   it('supports arrow-key navigation in the left menu', async () => {

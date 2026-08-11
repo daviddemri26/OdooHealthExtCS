@@ -4,7 +4,7 @@
 
 WXT generates Chrome/Chromium and Firefox Manifest V3 builds from one React and TypeScript codebase. Both content scripts match only `https://www.odoo.com/odoo*`. There is no background worker, remote executable code, external service, cookie permission, or host permission.
 
-The isolated content script runs at `document_idle` and creates two open Shadow DOM hosts. A low-layer panel host is appended directly to Odoo's active `.o_form_sheet`, so the compact controls share the form's scroll and stacking context. A separate fixed host contains only transient status messages. All extension styles and React nodes stay inside those boundaries; the hosts ignore pointer events while interactive controls opt in.
+The isolated content script runs at `document_idle` and creates two open Shadow DOM hosts. A low-layer panel host is appended directly to Odoo's active `.o_form_sheet`, so the compact controls share the form's scroll and stacking context. A separate fixed host contains only transient status messages. Interactive extension styles and React nodes stay inside those boundaries; the hosts ignore pointer events while interactive controls opt in. The read-only subscription-list preview is the narrow exception: it uses namespaced marker elements and one namespaced document style so it can decorate native Customer cells without intercepting input.
 
 A separate script runs at `document_start` with `world: "MAIN"`. It shares the Odoo page's execution environment only so authenticated same-origin RPC requests use the active page session. It has no UI or extension API access. A versioned singleton replaces a stale listener after development reloads.
 
@@ -13,6 +13,8 @@ A separate script runs at `document_start` with `world: "MAIN"`. It shares the O
 `src/odoo/routes.ts` accepts only the exact `www.odoo.com` hostname and `/odoo` path prefix. It supports direct `/odoo/subscriptions/{id}` routes and nested routes whose active model segment is `sale.order/{id}`. A nested route ending in another model, such as `res.partner/{id}`, unmounts the subscription features.
 
 Odoo is a single-page application. The entrypoint watches relevant DOM changes, URL changes, history events, viewport changes, and theme changes, then coalesces bursts into one idempotent render. Feature state resets when the active sale order changes. The UI mounts only when a rendered Odoo subscription form includes `partner_id` and its visible `subscription_state` badge reads exactly **In Progress**. Text-node observation lets the controls appear or disappear when Odoo changes that badge without navigating to another URL.
+
+The subscription-list preview does not use the URL as an eligibility gate. It requires an active `.o_list_view.o_view_controller.o_action`, a native Odoo list table containing `name`, `partner_id`, and `subscription_state`, plus at least one of `plan_id`, `next_invoice_date`, or `recurring_total`. It targets each `td[name="partner_id"]` independently of column order and ignores grouping and total rows. URL changes remain one signal for invalidating stale SPA state and rerunning the structural check.
 
 The visual controls locate the visible native `[name="date_order"]` widget and contract title on each render. The preferred title anchor is `[name="client_order_ref"]`; the form's `h1` is a Firefox-tolerant fallback when Odoo omits that wrapper. The layout reader accepts both Odoo's paired `.o_cell` structure and flatter `sale.order` markup, using nearby labels and links only for typography rather than as hard eligibility requirements. The compact framed panel attaches to the top edge of the form sheet, begins 48 pixels after the rendered title, shrinks to its current content, and caps its right edge before the native `subscription_state` badge. Industry appears first and Health second. This keeps long industry names away from the status badge while still following chatter, zoom, responsive width, native scrolling, and SPA rerenders. If the essential anchors are absent or leave less than 260 pixels of safe width, the controls do not fall back to an unrelated position.
 
@@ -30,7 +32,7 @@ On every allowed `https://www.odoo.com/odoo*` page, the isolated entrypoint asks
 
 The bridge validates every request before contacting Odoo, then uses the absolute same-origin `/web/dataset/call_kw/{model}/{method}` URL with `credentials: same-origin`. Its allow-list is limited to:
 
-- `sale.order`: field metadata for `tag_ids`; reads of `tag_ids`, `partner_id`, and `subscription_state`; and writes containing only a complete `tag_ids` many-to-many replacement command.
+- `sale.order`: field metadata for `tag_ids`; reads of `tag_ids`, `partner_id`, and `subscription_state`; bounded list searches using only an exact `name in [...]` domain and returning only `id`, `name`, and `tag_ids`; and writes containing only a complete `tag_ids` many-to-many replacement command.
 - `crm.tag`: an exact-name search for the three canonical health tags returning only `id` and `name`.
 - `res.partner`: field metadata, reads, and writes limited to `industry_id`.
 - `res.partner.industry`: the ordered industry search returning only `id` and `name`.
@@ -45,13 +47,15 @@ The health service discovers the relation behind `sale.order.tag_ids`, queries e
 
 Duplicate health tags display a warning and an indeterminate textual state. The next selection cleans the duplicates. If canonical tags are missing or ambiguous, all health writes stay disabled.
 
+When enabled independently, the list preview reads the visible subscription names in batches of at most 100 and maps their tag IDs to High, Medium, Low, Not set, or Ambiguous. A 3-pixel noninteractive marker is inserted at the left edge of each native Customer cell. A lighter gray loading marker reserves the final layout immediately; the same element transitions to the resolved color without shifting the customer text. Missing, duplicate, unsafe, or stale records fail closed, and navigation, view changes, setting changes, and teardown remove the markers immediately.
+
 ## Industry
 
 The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact ID for all reads and writes. Choices come dynamically from `res.partner.industry`; clearing writes `false`. The current value appears as an Odoo-style link above Health. Clicking it opens a compact anchored dropdown with search, outside-click dismissal, native Tab behavior, explicit Arrow Up/Down option movement, Enter selection, Escape to close, and current-selection semantics.
 
 ## Settings and compatibility
 
-`ExtensionSettings` has schema version 2 and stores only the master switch, two feature switches, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled. Version 1 settings migrate automatically without changing existing feature or appearance choices. A sanitized general connection code and timestamp are stored locally. The optional connected-user label is explicitly excluded from storage and is available only through the active tab's live message listener. Runtime validation rejects malformed types, unknown connection codes, legacy feature-specific diagnostic codes, and malformed live identity responses. The popup subscribes to connection-status changes so an open panel reflects a completed probe immediately. Storage failures fall back safely in the UI, and connection-status storage can never block any feature controls.
+`ExtensionSettings` has schema version 3 and stores only the master switch, two feature switches, the independent list-preview switch, two per-feature success-toast preferences, and appearance preference in browser synchronized storage. Both toast preferences default to enabled; the list preview defaults to disabled. Version 1 and 2 settings migrate automatically without changing existing feature or appearance choices and receive the disabled list-preview default. Account Health is shown as enabled in navigation when either its form shortcut or list preview is active. A sanitized general connection code and timestamp are stored locally. The optional connected-user label is explicitly excluded from storage and is available only through the active tab's live message listener. Runtime validation rejects malformed types, unknown connection codes, legacy feature-specific diagnostic codes, and malformed live identity responses. The popup subscribes to connection-status changes so an open panel reflects a completed probe immediately. Storage failures fall back safely in the UI, and connection-status storage can never block any feature controls.
 
 ## Status and Undo
 

@@ -17,8 +17,9 @@ import type { ExtensionSettings } from '../src/shared/types';
 import { MockGateway } from './helpers/mock-gateway';
 
 const settings: ExtensionSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   enabled: true,
+  healthListPreview: true,
   features: { health: true, industry: true },
   successToasts: { health: true, industry: true },
   appearance: 'dark',

@@ -6,7 +6,7 @@
     "en-US": "Faster account health and industry updates for authorized Odoo Customer Success users."
   },
   "description": {
-    "en-US": "Version 1 internal Odoo subscription shortcuts for account health and customer industry, shown only while the subscription is In Progress. Runs only on www.odoo.com/odoo*, uses the current Odoo session, and sends no data to external services. This is not an installable Odoo module or an official Odoo product. © DDEM"
+    "en-US": "Internal Odoo subscription shortcuts for account health and customer industry, plus an optional read-only health preview in recognized subscription lists. Interactive controls remain limited to In Progress subscriptions. Runs only on www.odoo.com/odoo*, uses the current Odoo session, and sends no data to external services. This is not an installable Odoo module or an official Odoo product. © DDEM"
   },
   "homepage": {
     "en-US": "https://daviddemri26.github.io/OdooHealthExtCS/"
@@ -15,13 +15,13 @@
     "en-US": "https://daviddemri26.github.io/OdooHealthExtCS/support.html"
   },
   "privacy_policy": {
-    "en-US": "OdooHealthExtCS processes account-health and customer-industry data only in the browser and through the user's current same-origin Odoo session to perform explicit user actions. The settings popup may show the active Odoo user's display name or login; this value remains only in volatile tab memory and is never stored or transmitted to the developer or any third party. The extension sends no Odoo page data to external services, uses no analytics or advertising, and stores only extension preferences plus a sanitized compatibility status. Full policy: https://daviddemri26.github.io/OdooHealthExtCS/privacy.html"
+    "en-US": "OdooHealthExtCS processes account-health and customer-industry data only in the browser and through the user's current same-origin Odoo session. When the optional list preview is enabled, it performs bounded reads of visible subscription names and health tags. The settings popup may show the active Odoo user's display name or login; this value remains only in volatile tab memory and is never stored or transmitted to the developer or any third party. The extension sends no Odoo page data to external services, uses no analytics or advertising, and stores only extension preferences plus a sanitized compatibility status. Full policy: https://daviddemri26.github.io/OdooHealthExtCS/privacy.html"
   },
   "requires_payment": false,
   "version": {
     "license": "MIT",
     "release_notes": {
-      "en-US": "Version 1.1 adds a larger tabbed control panel with dedicated Connection, Settings, Account Health, and Industry pages. It also adds general Odoo connection status, the connected user's display name in volatile memory, refined privacy information, and clearer feature settings. The inline shortcuts remain limited to In Progress subscriptions."
+      "en-US": "Version 1.2 adds an optional health-color preview beside customers in recognized Odoo subscription lists. It detects eligible lists from stable Odoo structure, supports reordered columns and SPA rerenders, and reserves the marker space before data loads so customer names do not shift. The preview has its own disabled-by-default setting and adds no browser permission or write access."
     },
     "approval_notes": "Built from the attached human-readable source archive with Node 22 and pnpm 10. The web-ext static innerHTML notices originate in the generated React runtime; extension source does not use dangerouslySetInnerHTML or process untrusted HTML."
   }

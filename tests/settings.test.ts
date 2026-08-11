@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../src/shared/settings';
 
 describe('extension settings', () => {
-  it('enables both success toasts by default', () => {
+  it('enables success toasts and disables the list preview by default', () => {
     expect(DEFAULT_SETTINGS.successToasts).toEqual({ health: true, industry: true });
+    expect(DEFAULT_SETTINGS.healthListPreview).toBe(false);
   });
 
-  it('migrates version 1 settings without changing existing feature preferences', () => {
+  it('migrates legacy settings without changing existing feature preferences', () => {
     expect(
       normalizeSettings({
         schemaVersion: 1,
@@ -16,8 +17,9 @@ describe('extension settings', () => {
         appearance: 'dark',
       }),
     ).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       enabled: true,
+      healthListPreview: false,
       features: { health: false, industry: true },
       successToasts: { health: true, industry: true },
       appearance: 'dark',
@@ -29,13 +31,15 @@ describe('extension settings', () => {
       normalizeSettings({
         schemaVersion: 2,
         enabled: 'yes',
+        healthListPreview: 'yes',
         features: { health: 1, industry: false },
         successToasts: { health: null, industry: true },
         appearance: 'dark',
       }),
     ).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       enabled: true,
+      healthListPreview: false,
       features: { health: true, industry: false },
       successToasts: { health: true, industry: true },
       appearance: 'dark',

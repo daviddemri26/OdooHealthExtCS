@@ -945,6 +945,10 @@ a {
   box-shadow: 0 8px 24px rgba(50, 34, 46, 0.035);
 }
 
+.standalone-option-card {
+  margin-top: 12px;
+}
+
 .setting-row {
   position: relative;
   display: flex;

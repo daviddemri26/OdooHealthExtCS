@@ -49,6 +49,11 @@ describe('Odoo bridge allow-list', () => {
       call({ args: [[42], ['partner_id']] }),
       call({ model: 'res.partner', args: [[7], ['industry_id']] }),
       call({
+        method: 'search_read',
+        args: [[['name', 'in', ['SO2026/1', 'SO2026/2']]]],
+        kwargs: { fields: ['id', 'name', 'tag_ids'], limit: 4 },
+      }),
+      call({
         model: 'crm.tag',
         method: 'search_read',
         args: [[['name', 'in', [...CANONICAL_HEALTH_NAMES]]]],
@@ -77,6 +82,26 @@ describe('Odoo bridge allow-list', () => {
     call({ method: 'unlink' }),
     call({ args: [[42], ['amount_total']] }),
     call({ args: [[42, 43], ['tag_ids']] }),
+    call({
+      method: 'search_read',
+      args: [[['name', 'in', ['SO2026/1', 'SO2026/1']]]],
+      kwargs: { fields: ['id', 'name', 'tag_ids'], limit: 4 },
+    }),
+    call({
+      method: 'search_read',
+      args: [[['name', 'in', ['SO2026/1']]]],
+      kwargs: { fields: ['id', 'name', 'partner_id', 'tag_ids'], limit: 2 },
+    }),
+    call({
+      method: 'search_read',
+      args: [[['name', 'in', ['SO2026/1']]]],
+      kwargs: { fields: ['id', 'name', 'tag_ids'], limit: 100 },
+    }),
+    call({
+      method: 'search_read',
+      args: [[['name', 'in', Array.from({ length: 101 }, (_, index) => `SO2026/${index + 1}`)]]],
+      kwargs: { fields: ['id', 'name', 'tag_ids'], limit: 202 },
+    }),
     call({
       model: 'crm.tag',
       method: 'search_read',

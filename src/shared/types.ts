@@ -3,8 +3,9 @@ export type HealthState = 'high' | 'medium' | 'low' | null;
 export type AppearancePreference = 'auto' | 'light' | 'dark';
 
 export interface ExtensionSettings {
-  schemaVersion: 2;
+  schemaVersion: 3;
   enabled: boolean;
+  healthListPreview: boolean;
   features: {
     health: boolean;
     industry: boolean;

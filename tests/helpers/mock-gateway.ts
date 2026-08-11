@@ -1,4 +1,5 @@
 import type {
+  OdooDomain,
   OdooFieldDefinition,
   OdooGateway,
   OdooRecord,
@@ -10,6 +11,12 @@ export class MockGateway implements OdooGateway {
   reads: Record<string, OdooRecord[]> = {};
   searches: Record<string, OdooRecord[]> = {};
   writes: { model: string; ids: number[]; values: OdooValues }[] = [];
+  searchCalls: Array<{
+    model: string;
+    domain: OdooDomain;
+    fields: string[];
+    options: { limit?: number; order?: string };
+  }> = [];
   writeResult = true;
 
   async read<T extends OdooRecord>(model: string): Promise<T[]> {
@@ -28,7 +35,13 @@ export class MockGateway implements OdooGateway {
     );
   }
 
-  async searchRead<T extends OdooRecord>(model: string): Promise<T[]> {
+  async searchRead<T extends OdooRecord>(
+    model: string,
+    domain: OdooDomain,
+    fields: string[],
+    options: { limit?: number; order?: string } = {},
+  ): Promise<T[]> {
+    this.searchCalls.push({ model, domain, fields, options });
     return (this.searches[model] ?? []) as T[];
   }
 
