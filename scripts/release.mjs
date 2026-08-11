@@ -3,8 +3,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
-const releaseMode = process.argv[2];
-if (!['patch', 'minor', 'major'].includes(releaseMode)) {
+const releaseArguments = process.argv.slice(2).filter((argument) => argument !== '--');
+const [releaseMode] = releaseArguments;
+if (releaseArguments.length !== 1 || !['patch', 'minor', 'major'].includes(releaseMode)) {
   throw new Error('Usage: pnpm release -- patch|minor|major');
 }
 
