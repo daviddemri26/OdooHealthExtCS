@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-11
+
 ### Added
 
 - Added a protected Firefox recovery workflow that verifies and submits immutable GitHub Release assets to the approved AMO listing without moving a tag or affecting Chrome.
