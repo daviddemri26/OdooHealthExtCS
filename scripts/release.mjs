@@ -10,11 +10,12 @@ if (releaseArguments.length !== 1 || !['patch', 'minor', 'major'].includes(relea
 }
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  const output = execFileSync(command, args, {
     cwd: projectRoot,
     encoding: 'utf8',
     stdio: options.capture ? 'pipe' : 'inherit',
-  }).trim();
+  });
+  return typeof output === 'string' ? output.trim() : '';
 }
 
 const branch = run('git', ['branch', '--show-current'], { capture: true });
