@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-13
+
 ### Fixed
 
 - Restored Industry for subscriptions whose persistent readable `res.partner` record is exposed through `sale.order.partner_id` with a signed nonzero ID, preserving that exact partner ID through reads, writes, and safe Undo.

@@ -1,6 +1,6 @@
 {
   "name": "odoo-health-ext-cs",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "Fast, safe account health and industry updates for Odoo Customer Success.",
   "type": "module",
