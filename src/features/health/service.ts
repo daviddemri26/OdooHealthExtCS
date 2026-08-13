@@ -1,4 +1,4 @@
-import type { HealthState, Many2OneValue, OdooGateway, OdooRecord } from '../../shared/types';
+import type { HealthState, OdooGateway, OdooRecord } from '../../shared/types';
 import { OdooGatewayError } from '../../odoo/gateway';
 import { MAX_SUBSCRIPTION_LIST_BATCH } from '../../odoo/bridge-protocol';
 
@@ -10,8 +10,6 @@ export const HEALTH_TAG_NAMES: Record<Exclude<HealthState, null>, string> = {
 
 interface SaleOrderRecord extends OdooRecord {
   tag_ids: number[];
-  partner_id: Many2OneValue;
-  subscription_state?: string | false;
 }
 
 interface TagRecord extends OdooRecord {
@@ -120,11 +118,7 @@ export async function loadHealthContext(
 ): Promise<HealthContext> {
   const [tags, orders] = await Promise.all([
     resolveHealthTags(gateway),
-    gateway.read<SaleOrderRecord>(
-      'sale.order',
-      [orderId],
-      ['tag_ids', 'partner_id', 'subscription_state'],
-    ),
+    gateway.read<SaleOrderRecord>('sale.order', [orderId], ['tag_ids']),
   ]);
   const order = orders[0];
   if (

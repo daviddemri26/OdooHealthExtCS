@@ -109,6 +109,30 @@ function renderContent(
 describe('optimistic Odoo controls', () => {
   beforeEach(() => saveSettings.mockClear());
 
+  it('keeps empty Health and a signed Industry partner available after form loading', async () => {
+    const gateway = configuredGateway();
+    gateway.reads['sale.order'] = [
+      {
+        id: 42,
+        tag_ids: [],
+        partner_id: [-81, 'Synthetic Customer'],
+        subscription_state: 'in_progress',
+      },
+    ];
+    gateway.reads['res.partner'] = [{ id: -81, industry_id: [2, 'Education'] }];
+    const view = renderContent(gateway);
+    try {
+      await waitFor(() =>
+        expect(view.panel.querySelector('.health-current')).toHaveTextContent('Not set'),
+      );
+      expect(within(view.panel).getByRole('button', { name: 'Education' })).toBeEnabled();
+      expect(within(view.panel).getByRole('button', { name: 'Set health to Low' })).toBeEnabled();
+      expect(document.querySelector('[role="status"]')).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+    }
+  });
+
   it('updates Health immediately and restores it when Odoo rejects the write', async () => {
     const gateway = configuredGateway();
     const write = deferred<boolean>();

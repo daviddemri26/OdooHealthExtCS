@@ -51,7 +51,7 @@ export async function loadIndustryContext(
   if (
     !Array.isArray(partner) ||
     !Number.isSafeInteger(partner[0]) ||
-    partner[0] <= 0 ||
+    partner[0] === 0 ||
     typeof partner[1] !== 'string'
   ) {
     throw new OdooGatewayError(

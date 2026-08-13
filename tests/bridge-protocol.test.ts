@@ -45,9 +45,9 @@ describe('Odoo bridge allow-list', () => {
           attributes: ['type', 'relation', 'readonly', 'string'],
         },
       }),
-      call({ args: [[42], ['tag_ids', 'partner_id', 'subscription_state']] }),
       call({ args: [[42], ['partner_id']] }),
       call({ model: 'res.partner', args: [[7], ['industry_id']] }),
+      call({ model: 'res.partner', args: [[-7], ['industry_id']] }),
       call({
         method: 'search_read',
         args: [[['name', 'in', ['SO2026/1', 'SO2026/2']]]],
@@ -71,6 +71,7 @@ describe('Odoo bridge allow-list', () => {
       }),
       call({ model: 'res.partner', method: 'write', args: [[7], { industry_id: false }] }),
       call({ model: 'res.partner', method: 'write', args: [[7], { industry_id: 9 }] }),
+      call({ model: 'res.partner', method: 'write', args: [[-7], { industry_id: 9 }] }),
     ];
 
     for (const operation of allowed)
@@ -81,7 +82,10 @@ describe('Odoo bridge allow-list', () => {
     call({ model: 'res.users' }),
     call({ method: 'unlink' }),
     call({ args: [[42], ['amount_total']] }),
+    call({ args: [[42], ['tag_ids', 'partner_id', 'subscription_state']] }),
     call({ args: [[42, 43], ['tag_ids']] }),
+    call({ args: [[-42], ['tag_ids']] }),
+    call({ model: 'res.partner', args: [[0], ['industry_id']] }),
     call({
       method: 'search_read',
       args: [[['name', 'in', ['SO2026/1', 'SO2026/1']]]],
@@ -109,8 +113,10 @@ describe('Odoo bridge allow-list', () => {
       kwargs: { fields: ['id', 'name'], limit: 20 },
     }),
     call({ method: 'write', args: [[42], { tag_ids: [[4, 99]] }] }),
+    call({ method: 'write', args: [[42], { tag_ids: [[6, 0, [-99]]] }] }),
     call({ method: 'write', args: [[42], { tag_ids: [[6, 0, []]], amount_total: 0 }] }),
     call({ model: 'res.partner', method: 'write', args: [[7], { industry_id: '9' }] }),
+    call({ model: 'res.partner', method: 'write', args: [[-7], { industry_id: -9 }] }),
   ])('rejects an operation outside the exact allow-list', (operation) => {
     expect(validateOdooBridgeCall(operation)).toMatchObject({
       ok: false,

@@ -7,7 +7,7 @@ The current release targets the `www.odoo.com` Odoo 19.3 web client and its curr
 The extension relies on stable model semantics rather than copied DOM values:
 
 - `sale.order.tag_ids` is a writable many-to-many relation to `crm.tag`, which contains the three exact canonical health tag names.
-- `sale.order.partner_id` is the subscription's customer many-to-one.
+- `sale.order.partner_id` is the subscription's customer many-to-one. Odoo can expose its persistent readable `res.partner` record with a signed nonzero safe-integer ID, which must be preserved exactly for partner reads and writes.
 - `res.partner.industry_id` is a writable many-to-one.
 - `res.partner.industry` supplies industry choices.
 - authenticated JSON-RPC model calls remain available at `/web/dataset/call_kw` from the Odoo page's `MAIN` execution world.
@@ -18,7 +18,7 @@ The route and form checks use several signals so minor web-client layout changes
 
 ## Future Odoo 19.x releases
 
-For each 19.x release, run the complete QA checklist in both browsers. Confirm the bridge handshake, exact request allow-list, direct and nested subscription routes, list-view structural signature, reordered columns, grouped rows, pagination and filters, field metadata, canonical tags, industry relation, permission behavior, light/dark rendering, and SPA navigation. If a DOM anchor changes but the model contract is intact, update the anchor selector without widening route or list eligibility.
+For each 19.x release, run the complete QA checklist in both browsers. Confirm the bridge handshake, exact request allow-list, direct and nested subscription routes, list-view structural signature, reordered columns, grouped rows, pagination and filters, field metadata, canonical tags, signed nonzero partner-ID preservation, positive industry IDs, permission behavior, light/dark rendering, and SPA navigation. Confirm separately that Account Health loads from `tag_ids` alone. If a DOM anchor changes but the model contract is intact, update the anchor selector without widening route or list eligibility.
 
 ## Odoo 20
 
@@ -26,6 +26,6 @@ Treat Odoo 20 as unsupported until a controlled compatibility pass succeeds. Che
 
 ## Failure policy
 
-Unknown fields, wrong relations, malformed records, missing or duplicate canonical tag definitions, access denial, and unsupported responses fail closed. The affected feature becomes unavailable and exposes only a sanitized feature error; it does not overwrite the independent general connection status. Do not add fallback writes based on visible labels or positional DOM scraping.
+Unknown fields, wrong relations, malformed records, missing or duplicate canonical tag definitions, access denial, and unsupported responses fail closed. A partner ID may be signed but must be a nonzero safe integer; zero or unsafe partner IDs are rejected, and order, tag, industry, user, and all other relation IDs must remain positive. The affected feature becomes unavailable and exposes only a sanitized feature error; it does not overwrite the independent general connection status. Do not add fallback writes based on visible labels or positional DOM scraping.
 
 Record verified versions and dates in release notes. A successful build proves package integrity, not live Odoo compatibility; controlled noncritical record validation is required before the first store release and after material Odoo changes.

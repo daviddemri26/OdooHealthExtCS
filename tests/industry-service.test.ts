@@ -19,42 +19,59 @@ describe('industry service', () => {
     expect(gateway.writes).toHaveLength(0);
   });
 
-  it('loads the exact subscription partner and dynamic choices', async () => {
+  it('loads the exact signed subscription partner and dynamic choices', async () => {
     const gateway = new MockGateway();
     gateway.fields['res.partner'] = {
       industry_id: { type: 'many2one', relation: 'res.partner.industry' },
     };
-    gateway.reads['sale.order'] = [{ id: 42, partner_id: [81, 'Demo Customer'] }];
-    gateway.reads['res.partner'] = [{ id: 81, industry_id: [3, 'Technology'] }];
+    gateway.reads['sale.order'] = [{ id: 42, partner_id: [-81, 'Synthetic Customer'] }];
+    gateway.reads['res.partner'] = [{ id: -81, industry_id: [3, 'Technology'] }];
     gateway.searches['res.partner.industry'] = [
       { id: 3, name: 'Technology' },
       { id: 2, name: 'Education' },
     ];
     await expect(loadIndustryContext(gateway, 42)).resolves.toEqual({
-      partnerId: 81,
-      partnerName: 'Demo Customer',
+      partnerId: -81,
+      partnerName: 'Synthetic Customer',
       currentIndustryId: 3,
       industries: [
         { id: 2, name: 'Education' },
         { id: 3, name: 'Technology' },
       ],
     });
+    expect(gateway.readCalls).toEqual([
+      { model: 'sale.order', ids: [42], fields: ['partner_id'] },
+      { model: 'res.partner', ids: [-81], fields: ['industry_id'] },
+    ]);
   });
 
-  it('sets and clears industry using Odoo many2one values', async () => {
+  it('preserves a signed partner ID while setting and clearing industry', async () => {
     const gateway = new MockGateway();
     const context = {
-      partnerId: 81,
-      partnerName: 'Demo Customer',
+      partnerId: -81,
+      partnerName: 'Synthetic Customer',
       currentIndustryId: 3,
       industries: [],
     };
     await applyIndustryChange(gateway, context, 5);
     await applyIndustryChange(gateway, context, null);
-    expect(gateway.writes.map((write) => write.values)).toEqual([
-      { industry_id: 5 },
-      { industry_id: false },
+    expect(gateway.writes).toEqual([
+      { model: 'res.partner', ids: [-81], values: { industry_id: 5 } },
+      { model: 'res.partner', ids: [-81], values: { industry_id: false } },
     ]);
+  });
+
+  it('rejects a zero partner ID', async () => {
+    const gateway = new MockGateway();
+    gateway.fields['res.partner'] = {
+      industry_id: { type: 'many2one', relation: 'res.partner.industry' },
+    };
+    gateway.reads['sale.order'] = [{ id: 42, partner_id: [0, 'Synthetic Customer'] }];
+
+    await expect(loadIndustryContext(gateway, 42)).rejects.toMatchObject({
+      code: 'incompatible_response',
+    });
+    expect(gateway.readCalls).toEqual([{ model: 'sale.order', ids: [42], fields: ['partner_id'] }]);
   });
 
   it('surfaces a failed industry write', async () => {
@@ -69,13 +86,19 @@ describe('industry service', () => {
     ).rejects.toMatchObject({ code: 'server_error' });
   });
 
-  it('undoes only if the customer value is still the applied value', async () => {
+  it('preserves a signed partner ID when safely undoing', async () => {
     const gateway = new MockGateway();
-    const change = { partnerId: 81, before: 3, applied: 5 };
-    gateway.reads['res.partner'] = [{ id: 81, industry_id: [5, 'Manufacturing'] }];
+    const change = { partnerId: -81, before: 3, applied: 5 };
+    gateway.reads['res.partner'] = [{ id: -81, industry_id: [5, 'Manufacturing'] }];
     await expect(undoIndustryChange(gateway, change)).resolves.toBe(true);
-    gateway.reads['res.partner'] = [{ id: 81, industry_id: [7, 'Retail'] }];
+    gateway.reads['res.partner'] = [{ id: -81, industry_id: [7, 'Retail'] }];
     await expect(undoIndustryChange(gateway, change)).resolves.toBe(false);
-    expect(gateway.writes).toHaveLength(1);
+    expect(gateway.readCalls).toEqual([
+      { model: 'res.partner', ids: [-81], fields: ['industry_id'] },
+      { model: 'res.partner', ids: [-81], fields: ['industry_id'] },
+    ]);
+    expect(gateway.writes).toEqual([
+      { model: 'res.partner', ids: [-81], values: { industry_id: 3 } },
+    ]);
   });
 });

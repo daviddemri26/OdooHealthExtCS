@@ -9,7 +9,7 @@
 
 ## Current store state
 
-`store/release-state.json` is the repository's public source of truth for the Chrome item ID, Firefox add-on ID, listing URLs, and independent publication gates. Chrome and Firefox both serve version 1.1.0 publicly as of August 11, 2026. Their protected publication variables are enabled, so a validated version tag submits the same release to both stores.
+`store/release-state.json` is the repository's public source of truth for the Chrome item ID, Firefox add-on ID, listing URLs, and independent publication gates. Chrome and Firefox both serve version 1.2.0 publicly as of August 13, 2026. Their protected publication variables are enabled, so a validated version tag submits the same release to both stores.
 
 The initial-review version freeze no longer applies. Continue recording completed changes under `CHANGELOG.md` → `Unreleased`, validate with `pnpm package`, and use the semantic release command only when a new version is ready.
 
@@ -19,15 +19,15 @@ The development validator rejects any package-version change while neither store
 
 - `CHROME_PUBLISH_ENABLED=true` submits through the protected `chrome-store` environment after a status preflight. The job refuses to replace an item that is pending review, staged, uploading, warned, or taken down.
 - `FIREFOX_PUBLISH_ENABLED=true` submits the listed Firefox build and matching human-readable source archive through the protected `firefox-amo` environment.
-- The **Submit Firefox Release** workflow remains a recovery path for an existing immutable GitHub Release whose automatic Firefox job did not reach AMO. It never publishes Chrome or moves a tag.
+- The **Submit Firefox Release** workflow remains a recovery path for an existing immutable GitHub Release whose automatic Firefox job did not reach AMO. It has no default release tag: the operator must enter the exact existing tag explicitly. It never publishes Chrome or moves a tag.
 
 ## Prepare a release
 
 1. Update the `Unreleased` changelog with user-visible and compatibility changes.
 2. Confirm the approved SVG exists at `assets/brand/odoo-health-ext-cs-icon.svg`.
-3. Run the QA checklist, including controlled writes on a noncritical record.
+3. Run the QA checklist, including controlled writes on a noncritical record when the release scope and approval permit them. For v1.2.1, keep the live Odoo check read-only: verify in Chrome and Firefox that Account Health loads from `tag_ids` alone and Industry loads through the exact signed nonzero partner ID. Verify write, clear, and safe Undo preservation with sanitized synthetic tests only.
 4. Confirm `main` is clean and synchronized with `origin/main`.
-5. Run `pnpm release -- patch`, `minor`, or `major`. Use `minor` for a new backward-compatible user feature such as the subscription-list health preview.
+5. For v1.2.1, run `pnpm release -- patch`. For a later release, pass `minor` or `major` instead only when the documented changes require that semantic version increment.
 
 The release script first requires at least one initial publication status to be `published`. It then validates the existing version, documented Unreleased changes, clean branch, remote synchronization, and absence of an existing tag. It updates the version, changelog, and lockfile, commits those release files, creates an annotated `vX.Y.Z` tag, and pushes the commit and tag. The workflow independently skips every store whose initial version is not yet published.
 
@@ -35,7 +35,7 @@ The release script first requires at least one initial publication status to be 
 
 The release workflow checks out the tag, installs with a frozen lockfile on Node 22/pnpm 10, rebuilds everything, verifies the publication gate plus tag/package/manifest versions, creates checksums and provenance, and publishes a permanent GitHub Release. Chrome and Firefox run independently behind their environment variables. A disabled store is reported as skipped and cannot fail the GitHub Release.
 
-Chrome authenticates through GitHub OIDC and Google Workload Identity Federation. The publisher/item status is checked before upload; a pending or in-review item is never replaced. Firefox submits the built MV3 directory as listed and includes the human-readable source archive. The separate Firefox recovery workflow reuses immutable GitHub Release assets when an already-created release needs to join AMO later.
+Chrome authenticates through GitHub OIDC and Google Workload Identity Federation. The publisher/item status is checked before upload; a pending or in-review item is never replaced. Firefox submits the built MV3 directory as listed and includes the human-readable source archive. The separate Firefox recovery workflow reuses immutable GitHub Release assets when an already-created release needs to join AMO later, and requires the operator to supply that release's exact tag.
 
 ## Verification
 

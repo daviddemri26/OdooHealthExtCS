@@ -95,6 +95,57 @@ describe('MAIN-world Odoo bridge runtime', () => {
     });
   });
 
+  it('accepts a signed linked partner and uses it for the bounded partner read', async () => {
+    const readPartnerCall: OdooBridgeCall = {
+      model: 'sale.order',
+      method: 'read',
+      args: [[42], ['partner_id']],
+      kwargs: {},
+    };
+    const signedPartnerCall: OdooBridgeCall = {
+      model: 'res.partner',
+      method: 'read',
+      args: [[-81], ['industry_id']],
+      kwargs: {},
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          jsonrpc: '2.0',
+          id: null,
+          result: [{ id: 42, partner_id: [-81, 'Demo Customer'] }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          jsonrpc: '2.0',
+          id: null,
+          result: [{ id: -81, industry_id: [3, 'Demo Industry'] }],
+        }),
+      );
+
+    await expect(
+      executeOdooBridgeCall(readPartnerCall, { fetcher, origin: ODOO_BRIDGE_ORIGIN }),
+    ).resolves.toEqual({
+      ok: true,
+      result: [{ id: 42, partner_id: [-81, 'Demo Customer'] }],
+    });
+    await expect(
+      executeOdooBridgeCall(signedPartnerCall, { fetcher, origin: ODOO_BRIDGE_ORIGIN }),
+    ).resolves.toEqual({
+      ok: true,
+      result: [{ id: -81, industry_id: [3, 'Demo Industry'] }],
+    });
+
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      'https://www.odoo.com/web/dataset/call_kw/res.partner/read',
+    );
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toMatchObject({
+      params: signedPartnerCall,
+    });
+  });
+
   it('sanitizes the bounded subscription list health response', async () => {
     const listCall: OdooBridgeCall = {
       model: 'sale.order',
@@ -306,4 +357,28 @@ describe('MAIN-world Odoo bridge runtime', () => {
       executeOdooBridgeCall(readTagsCall, { fetcher, origin: 'https://www.odoo.com' }),
     ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
   });
+
+  it.each([
+    [
+      { ...readTagsCall, args: [[42], ['partner_id']] },
+      [{ id: 42, partner_id: [0, 'Zero Partner'] }],
+    ],
+    [readTagsCall, [{ id: -42, tag_ids: [] }]],
+    [readTagsCall, [{ id: 42, tag_ids: [-11] }]],
+    [
+      { model: 'res.partner', method: 'read', args: [[-81], ['industry_id']], kwargs: {} },
+      [{ id: -81, industry_id: [-3, 'Negative Industry'] }],
+    ],
+  ] satisfies [OdooBridgeCall, unknown][])(
+    'keeps unrelated ID types positive',
+    async (call, result) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(jsonResponse({ jsonrpc: '2.0', id: null, result }));
+
+      await expect(
+        executeOdooBridgeCall(call, { fetcher, origin: ODOO_BRIDGE_ORIGIN }),
+      ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
+    },
+  );
 });

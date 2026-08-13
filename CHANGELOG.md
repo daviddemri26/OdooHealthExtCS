@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored Industry for subscriptions whose persistent readable `res.partner` record is exposed through `sale.order.partner_id` with a signed nonzero ID, preserving that exact partner ID through reads, writes, and safe Undo.
+- Kept Account Health available by reading only the subscription's `tag_ids`, so response variations in unused partner or subscription-state fields no longer disable the Health control.
+
+### Security
+
+- Limited signed nonzero ID support to the exact partner request and response path; zero or unsafe partner IDs and non-positive order, tag, industry, and user IDs still fail closed.
+
 ## [1.2.0] - 2026-08-11
 
 ### Added

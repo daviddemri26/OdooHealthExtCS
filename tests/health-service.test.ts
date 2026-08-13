@@ -58,10 +58,28 @@ describe('account health service', () => {
       { id: 12, name: 'Health - Medium' },
       { id: 13, name: 'Health - Low' },
     ];
-    gateway.reads['sale.order'] = [{ id: 42, tag_ids: [5, 13], partner_id: [8, 'Demo Customer'] }];
+    gateway.reads['sale.order'] = [{ id: 42, tag_ids: [5, 13] }];
     await expect(loadHealthContext(gateway, 42)).resolves.toMatchObject({
       snapshot: { state: 'low', tagIds: [5, 13] },
     });
+    expect(gateway.readCalls).toEqual([{ model: 'sale.order', ids: [42], fields: ['tag_ids'] }]);
+  });
+
+  it('treats an empty form tag list as Not set', async () => {
+    const gateway = new MockGateway();
+    gateway.fields['sale.order'] = { tag_ids: { type: 'many2many', relation: 'crm.tag' } };
+    gateway.searches['crm.tag'] = [
+      { id: 11, name: 'Health - High' },
+      { id: 12, name: 'Health - Medium' },
+      { id: 13, name: 'Health - Low' },
+    ];
+    gateway.reads['sale.order'] = [{ id: 42, tag_ids: [] }];
+
+    await expect(loadHealthContext(gateway, 42)).resolves.toEqual({
+      tags,
+      snapshot: { tagIds: [], state: null, duplicate: false },
+    });
+    expect(gateway.readCalls).toEqual([{ model: 'sale.order', ids: [42], fields: ['tag_ids'] }]);
   });
 
   it('maps visible subscriptions to list indicator states', async () => {

@@ -8,6 +8,8 @@ After enabling GitHub Pages with the Actions source:
 - Privacy: `https://daviddemri26.github.io/OdooHealthExtCS/privacy.html`
 - Support: `https://daviddemri26.github.io/OdooHealthExtCS/support.html`
 
+Chrome and Firefox both serve version 1.2.0 publicly as of August 13, 2026. The setup below remains the reproducible configuration record for later maintainers.
+
 ## Chrome Web Store
 
 The public Chrome item ID is versioned in `store/release-state.json`. It is not a credential and does not belong in a GitHub secret.
@@ -35,7 +37,7 @@ The public Firefox add-on ID is versioned in both `wxt.config.ts` and `store/rel
 4. In GitHub environment `firefox-amo`, add `AMO_API_KEY` and `AMO_API_SECRET`.
 5. Set repository Actions variable `FIREFOX_PUBLISH_ENABLED=true` after the listing and first-version workflow are accepted.
 
-Firefox 1.0.0 was approved on August 9, 2026. After completing steps 3–5, run the protected **Submit Firefox Release** workflow once with `v1.1.0` to submit the existing validated release. Later version tags submit to Firefox automatically through the main release workflow.
+Firefox 1.0.0 was approved on August 9, 2026, and automated submissions are now active. Later version tags submit to Firefox automatically through the main release workflow. Use the protected **Submit Firefox Release** recovery workflow only when a specific existing immutable GitHub Release did not reach AMO automatically; it has no default tag, so enter the exact release tag explicitly.
 
 Never paste `AMO_API_SECRET` into repository files, issue comments, workflow logs, or chat. Enter it directly in the protected GitHub environment.
 
@@ -43,4 +45,4 @@ Reference: [current `web-ext` command documentation](https://extensionworkshop.c
 
 ## Independence and protections
 
-Each store environment can require a reviewer and is enabled independently. Store secrets are never available to pull requests or the build job. Version tags are the normal trigger for store jobs, at least one store must have completed its initial publication, and each store job checks its own published status before running. The protected Firefox recovery workflow may submit an existing validated GitHub Release without changing its tag. Concurrency never cancels an active release, and Chrome refuses a new upload while a prior submission is pending.
+Each store environment can require a reviewer and is enabled independently. Store secrets are never available to pull requests or the build job. Version tags are the normal trigger for store jobs, at least one store must have completed its initial publication, and each store job checks its own published status before running. The protected Firefox recovery workflow may submit an explicitly selected existing validated GitHub Release without changing its tag. Concurrency never cancels an active release, and Chrome refuses a new upload while a prior submission is pending.

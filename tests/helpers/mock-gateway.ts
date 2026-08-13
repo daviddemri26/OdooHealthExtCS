@@ -10,6 +10,7 @@ export class MockGateway implements OdooGateway {
   fields: Record<string, Record<string, OdooFieldDefinition>> = {};
   reads: Record<string, OdooRecord[]> = {};
   searches: Record<string, OdooRecord[]> = {};
+  readCalls: Array<{ model: string; ids: number[]; fields: string[] }> = [];
   writes: { model: string; ids: number[]; values: OdooValues }[] = [];
   searchCalls: Array<{
     model: string;
@@ -19,7 +20,8 @@ export class MockGateway implements OdooGateway {
   }> = [];
   writeResult = true;
 
-  async read<T extends OdooRecord>(model: string): Promise<T[]> {
+  async read<T extends OdooRecord>(model: string, ids: number[], fields: string[]): Promise<T[]> {
+    this.readCalls.push({ model, ids, fields });
     return (this.reads[model] ?? []) as T[];
   }
 

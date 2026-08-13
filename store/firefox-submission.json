@@ -21,8 +21,8 @@
   "version": {
     "license": "MIT",
     "release_notes": {
-      "en-US": "Version 1.2 adds an optional health-color preview beside customers in recognized Odoo subscription lists. It detects eligible lists from stable Odoo structure, supports reordered columns and SPA rerenders, and reserves the marker space before data loads so customer names do not shift. The preview has its own disabled-by-default setting and adds no browser permission or write access."
+      "en-US": "Version 1.2.1 restores Industry for subscriptions whose persistent readable Odoo partner record has a signed nonzero ID, preserving that exact ID through reads, writes, and safe Undo. Account Health now reads only the subscription tag IDs it needs, so unrelated partner or subscription-state response variations no longer disable Health. Signed IDs remain limited to the partner path; zero or unsafe partner IDs and non-positive order, tag, industry, and user IDs are rejected. This update adds no browser permission, data collection, or external service."
     },
-    "approval_notes": "Built from the attached human-readable source archive with Node 22 and pnpm 10. The web-ext static innerHTML notices originate in the generated React runtime; extension source does not use dangerouslySetInnerHTML or process untrusted HTML."
+    "approval_notes": "Built from the attached human-readable source archive with Node 22 and pnpm 10. Version 1.2.1 permits safe signed nonzero record IDs only for the exact sale.order.partner_id to res.partner request and response path; zero and unsafe partner IDs remain rejected, and all other record and relation IDs remain positive. Account Health narrows its form read to tag_ids only. The web-ext static innerHTML notices originate in the generated React runtime; extension source does not use dangerouslySetInnerHTML or process untrusted HTML."
   }
 }

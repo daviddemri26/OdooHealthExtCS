@@ -44,6 +44,10 @@ function isPositiveId(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
+function isSignedNonzeroId(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) !== 0;
+}
+
 function sanitizeUserDisplayName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const withoutControls = Array.from(value.normalize('NFKC'))
@@ -61,12 +65,15 @@ function sanitizeUserDisplayName(value: unknown): string | null {
   return sanitized || null;
 }
 
-function sanitizeMany2One(value: unknown): false | [number, string] {
+function sanitizeMany2One(
+  value: unknown,
+  isAllowedId: (candidate: unknown) => candidate is number,
+): false | [number, string] {
   if (value === false) return false;
   if (
     Array.isArray(value) &&
     value.length === 2 &&
-    isPositiveId(value[0]) &&
+    isAllowedId(value[0]) &&
     typeof value[1] === 'string'
   ) {
     return [value[0], value[1]];
@@ -88,9 +95,10 @@ function sanitizeRecordResult(call: OdooBridgeCall, value: unknown): unknown[] {
   if (!Array.isArray(value)) throw bridgeFailure('incompatible_response');
   const fields = call.args[1];
   if (!Array.isArray(fields)) throw bridgeFailure('incompatible_response');
+  const isAllowedRecordId = call.model === 'res.partner' ? isSignedNonzeroId : isPositiveId;
 
   return value.map((record) => {
-    if (!isRecord(record) || !isPositiveId(record.id)) {
+    if (!isRecord(record) || !isAllowedRecordId(record.id)) {
       throw bridgeFailure('incompatible_response');
     }
     const sanitized: Record<string, unknown> = { id: record.id };
@@ -101,7 +109,7 @@ function sanitizeRecordResult(call: OdooBridgeCall, value: unknown): unknown[] {
         }
         sanitized.tag_ids = [...record.tag_ids];
       } else if (field === 'partner_id') {
-        sanitized.partner_id = sanitizeMany2One(record.partner_id);
+        sanitized.partner_id = sanitizeMany2One(record.partner_id, isSignedNonzeroId);
       } else if (field === 'subscription_state') {
         if (
           record.subscription_state !== false &&
@@ -112,7 +120,7 @@ function sanitizeRecordResult(call: OdooBridgeCall, value: unknown): unknown[] {
         }
         sanitized.subscription_state = record.subscription_state;
       } else if (field === 'industry_id') {
-        sanitized.industry_id = sanitizeMany2One(record.industry_id);
+        sanitized.industry_id = sanitizeMany2One(record.industry_id, isPositiveId);
       }
     }
     return sanitized;

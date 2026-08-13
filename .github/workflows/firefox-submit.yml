@@ -6,7 +6,6 @@ on:
       release_tag:
         description: Existing validated GitHub Release tag to submit to AMO
         required: true
-        default: v1.1.0
         type: string
 
 permissions:

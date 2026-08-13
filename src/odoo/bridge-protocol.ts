@@ -1,7 +1,7 @@
 import type { CompatibilityCode } from '../shared/types';
 
 export const ODOO_BRIDGE_CHANNEL = 'odoo-health-ext-cs:rpc';
-export const ODOO_BRIDGE_VERSION = 3 as const;
+export const ODOO_BRIDGE_VERSION = 4 as const;
 export const ODOO_BRIDGE_ORIGIN = 'https://www.odoo.com';
 export const MAX_SUBSCRIPTION_LIST_BATCH = 100;
 
@@ -106,6 +106,10 @@ function isPositiveId(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
+function isSignedNonzeroId(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) !== 0;
+}
+
 function isIdList(value: unknown, maximum = 1): value is number[] {
   return (
     Array.isArray(value) &&
@@ -114,6 +118,10 @@ function isIdList(value: unknown, maximum = 1): value is number[] {
     value.every(isPositiveId) &&
     new Set(value).size === value.length
   );
+}
+
+function isSignedNonzeroIdList(value: unknown): value is number[] {
+  return Array.isArray(value) && value.length === 1 && value.every(isSignedNonzeroId);
 }
 
 function hasExactStringArray(value: unknown, expected: readonly string[]): boolean {
@@ -148,23 +156,22 @@ function isAllowedFieldsGet(call: OdooBridgeCall): boolean {
 }
 
 function isAllowedRead(call: OdooBridgeCall): boolean {
-  if (
-    call.method !== 'read' ||
-    call.args.length !== 2 ||
-    !isIdList(call.args[0]) ||
-    !isEmptyRecord(call.kwargs)
-  ) {
+  if (call.method !== 'read' || call.args.length !== 2 || !isEmptyRecord(call.kwargs)) {
     return false;
   }
+  const ids = call.args[0];
   const fields = call.args[1];
   if (call.model === 'sale.order') {
     return (
-      hasExactStringArray(fields, ['tag_ids', 'partner_id', 'subscription_state']) ||
-      hasExactStringArray(fields, ['tag_ids']) ||
-      hasExactStringArray(fields, ['partner_id'])
+      isIdList(ids) &&
+      (hasExactStringArray(fields, ['tag_ids']) || hasExactStringArray(fields, ['partner_id']))
     );
   }
-  return call.model === 'res.partner' && hasExactStringArray(fields, ['industry_id']);
+  return (
+    call.model === 'res.partner' &&
+    isSignedNonzeroIdList(ids) &&
+    hasExactStringArray(fields, ['industry_id'])
+  );
 }
 
 function isHealthDomain(value: unknown): boolean {
@@ -256,7 +263,6 @@ function isAllowedWrite(call: OdooBridgeCall): boolean {
   if (
     call.method !== 'write' ||
     call.args.length !== 2 ||
-    !isIdList(call.args[0]) ||
     !isEmptyRecord(call.kwargs) ||
     !isRecord(call.args[1])
   ) {
@@ -264,10 +270,15 @@ function isAllowedWrite(call: OdooBridgeCall): boolean {
   }
   const values = call.args[1];
   if (call.model === 'sale.order') {
-    return hasExactKeys(values, ['tag_ids']) && isTagReplacement(values.tag_ids);
+    return (
+      isIdList(call.args[0]) &&
+      hasExactKeys(values, ['tag_ids']) &&
+      isTagReplacement(values.tag_ids)
+    );
   }
   return (
     call.model === 'res.partner' &&
+    isSignedNonzeroIdList(call.args[0]) &&
     hasExactKeys(values, ['industry_id']) &&
     (values.industry_id === false || isPositiveId(values.industry_id))
   );

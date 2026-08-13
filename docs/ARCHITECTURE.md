@@ -32,18 +32,20 @@ On every allowed `https://www.odoo.com/odoo*` page, the isolated entrypoint asks
 
 The bridge validates every request before contacting Odoo, then uses the absolute same-origin `/web/dataset/call_kw/{model}/{method}` URL with `credentials: same-origin`. Its allow-list is limited to:
 
-- `sale.order`: field metadata for `tag_ids`; reads of `tag_ids`, `partner_id`, and `subscription_state`; bounded list searches using only an exact `name in [...]` domain and returning only `id`, `name`, and `tag_ids`; and writes containing only a complete `tag_ids` many-to-many replacement command.
+- `sale.order`: field metadata for `tag_ids`; separate reads limited to either `tag_ids` or `partner_id`; bounded list searches using only an exact `name in [...]` domain and returning only `id`, `name`, and `tag_ids`; and writes containing only a complete `tag_ids` many-to-many replacement command.
 - `crm.tag`: an exact-name search for the three canonical health tags returning only `id` and `name`.
 - `res.partner`: field metadata, reads, and writes limited to `industry_id`.
 - `res.partner.industry`: the ordered industry search returning only `id` and `name`.
 
 Every other model, method, field, domain, record batch, or write shape fails before fetch. Successful data is reduced to the allowed fields before crossing back to the isolated script.
 
+Record IDs remain positive safe integers except on the exact partner path. Odoo can expose a persistent readable `res.partner` record through `sale.order.partner_id` with a signed nonzero safe integer. The bridge accepts that value only as the `partner_id` relation and for `res.partner` request IDs and sanitized response record IDs, preserving it unchanged for Industry reads, writes, and safe Undo. Zero and unsafe integers are rejected. Sale-order, tag, industry, and user IDs, plus every other relation value, remain positive.
+
 Before enabling writes, services confirm the relevant field type and relation. Responses are shape-checked. The general connection check reports only bridge absence, timeout, authentication, authorization, network, endpoint, response-shape, and server failures. Missing tags, missing fields, and other feature capability failures stay local to the affected feature and never change the global Odoo connection state. Raw Odoo error data is never forwarded, persisted, or shown.
 
 ## Account health
 
-The health service discovers the relation behind `sale.order.tag_ids`, queries exact canonical names, and requires one unique ID for each state. A selection filters all three health IDs from the current array, appends exactly the chosen ID, and writes the full many-to-many replacement command. Other tags are preserved. Selecting the active state sends no health ID, which clears health.
+The health service discovers the relation behind `sale.order.tag_ids`, queries exact canonical names, and requires one unique ID for each state. Its form bootstrap reads only `tag_ids`; Health does not depend on the customer relation or subscription-state value. A selection filters all three health IDs from the current array, appends exactly the chosen ID, and writes the full many-to-many replacement command. Other tags are preserved. Selecting the active state sends no health ID, which clears health.
 
 Duplicate health tags display a warning and an indeterminate textual state. The next selection cleans the duplicates. If canonical tags are missing or ambiguous, all health writes stay disabled.
 
@@ -51,7 +53,7 @@ When enabled independently, the list preview reads the visible subscription name
 
 ## Industry
 
-The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact ID for all reads and writes. Choices come dynamically from `res.partner.industry`; clearing writes `false`. The current value appears as an Odoo-style link above Health. Clicking it opens a compact anchored dropdown with search, outside-click dismissal, native Tab behavior, explicit Arrow Up/Down option movement, Enter selection, Escape to close, and current-selection semantics.
+The industry service validates `res.partner.industry_id`, reads `sale.order.partner_id`, and uses that exact signed nonzero ID for all `res.partner` reads and writes. The ID is never normalized or replaced; only the partner path permits a negative value. Choices and their IDs come dynamically from `res.partner.industry` and remain positive; clearing writes `false`. The current value appears as an Odoo-style link above Health. Clicking it opens a compact anchored dropdown with search, outside-click dismissal, native Tab behavior, explicit Arrow Up/Down option movement, Enter selection, Escape to close, and current-selection semantics.
 
 ## Settings and compatibility
 

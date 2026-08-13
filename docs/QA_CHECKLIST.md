@@ -25,12 +25,15 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Foreign origins, sources, clients, versions, stale request IDs, and malformed responses are ignored.
 - [ ] Every model, method, field, domain, and write shape outside the documented allow-list is rejected before fetch.
 - [ ] Successful responses contain only allow-listed fields; errors contain no raw Odoo message, response body, or stack trace.
+- [ ] A signed nonzero safe-integer `sale.order.partner_id` is preserved in `res.partner` request IDs and sanitized response record IDs; zero and unsafe partner IDs are rejected.
+- [ ] Sale-order, tag, industry, and user IDs, plus every non-partner relation value, remain positive and reject zero or negative values.
 - [ ] Bridge unavailable, timeout, expired session, denied access, incompatible endpoint/response, network, and server failure are distinct.
 - [ ] Read-only live traffic goes only to `https://www.odoo.com/web/dataset/call_kw/...`.
 
 ## Account health
 
 - [ ] Not set, High, Medium, Low, and duplicate states are both visually and textually distinct.
+- [ ] Form Health bootstrap reads only `sale.order.tag_ids`; an empty tag list resolves to Not set without depending on `partner_id` or `subscription_state` response values.
 - [ ] Health controls appear in Low, Medium, High order as macOS red, yellow, and green circles without letters; the current state text appears to their right.
 - [ ] Health circles keep exactly the same size on hover and focus; only the selected value has a surrounding ring.
 - [ ] Selecting a state preserves every unrelated tag and leaves exactly one canonical health tag.
@@ -52,7 +55,8 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 
 ## Industry
 
-- [ ] Inline field reads the exact subscription `partner_id`, including contact/company distinctions.
+- [ ] Inline field reads the exact signed nonzero subscription `partner_id`, including contact/company distinctions, and preserves it through partner reads, writes, and safe Undo.
+- [ ] Industry rejects a zero or unsafe partner ID and any non-positive industry ID.
 - [ ] Choices load dynamically and sort correctly.
 - [ ] Search, No industry, current highlighting, Tab, Enter, Arrow Up/Down, and Escape work.
 - [ ] Set, clear, and Undo behave correctly; Undo refuses after an external change.
@@ -88,6 +92,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 
 - [ ] `pnpm release:status` matches the observed initial-publication state of both stores.
 - [ ] The public Chrome and Firefox versions are checked before preparing a replacement release.
+- [ ] For the v1.2.1 hotfix, Chrome and Firefox both load Not set Health and an available Industry control on an approved subscription whose persistent readable partner has a signed nonzero ID, without an unsupported-response toast.
 - [ ] Both store states are `published` and their protected publication variables are intentionally enabled before a shared tagged release.
 - [ ] The Chrome preflight refuses to replace a pending review, staged upload, policy warning, or takedown.
 - [ ] Final icon is legible at 16 px and the canonical SVG is approved.
