@@ -3,6 +3,15 @@ name: Release
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing immutable release tag to recover
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 permissions:
   contents: read
@@ -19,12 +28,19 @@ jobs:
     timeout-minutes: 25
     outputs:
       version: ${{ steps.version.outputs.version }}
+      git_sha: ${{ steps.identity.outputs.git_sha }}
       chrome_ready: ${{ steps.release_state.outputs.chrome_ready }}
       firefox_ready: ${{ steps.release_state.outputs.firefox_ready }}
     steps:
+      - name: Validate manual recovery context
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
@@ -36,14 +52,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - id: version
         run: node -p '"version=" + require("./package.json").version' >> "$GITHUB_OUTPUT"
+      - id: identity
+        run: echo "git_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - run: pnpm package
       - run: pnpm verify:release-version
       - env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
-          RELEASE_GIT_SHA: ${{ github.sha }}
+          RELEASE_GIT_SHA: ${{ steps.identity.outputs.git_sha }}
         run: node scripts/verify-release-assets.mjs artifacts
       - id: release_state
-        run: node scripts/verify-release-state.mjs release "$GITHUB_REF_NAME"
+        run: node scripts/verify-release-state.mjs release "$RELEASE_TAG"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-assets
@@ -80,18 +98,19 @@ jobs:
           path: artifacts
       - env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" artifacts/* --clobber
-            gh release edit "${GITHUB_REF_NAME}" \
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" artifacts/* --clobber
+            gh release edit "${RELEASE_TAG}" \
               --notes "" \
-              --title "OdooHealthExtCS ${GITHUB_REF_NAME}"
+              --title "OdooHealthExtCS ${RELEASE_TAG}"
           else
-            gh release create "${GITHUB_REF_NAME}" \
+            gh release create "${RELEASE_TAG}" \
               artifacts/* \
               --verify-tag \
               --notes "" \
-              --title "OdooHealthExtCS ${GITHUB_REF_NAME}"
+              --title "OdooHealthExtCS ${RELEASE_TAG}"
           fi
 
   chrome:
@@ -107,6 +126,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
@@ -116,7 +136,7 @@ jobs:
           path: artifacts
       - env:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          RELEASE_GIT_SHA: ${{ github.sha }}
+          RELEASE_GIT_SHA: ${{ needs.build.outputs.git_sha }}
         run: node scripts/verify-release-assets.mjs artifacts
       - id: auth
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
@@ -129,7 +149,7 @@ jobs:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
         run: node scripts/publish-chrome.mjs
-      - run: echo "Chrome package submitted from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+      - run: echo "Chrome package submitted from $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
 
   firefox:
     name: Firefox — verify AMO has no duplicate or pending version before approval
@@ -146,6 +166,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
@@ -161,7 +182,7 @@ jobs:
           path: artifacts
       - env:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          RELEASE_GIT_SHA: ${{ github.sha }}
+          RELEASE_GIT_SHA: ${{ needs.build.outputs.git_sha }}
         run: node scripts/verify-release-assets.mjs artifacts
       - env:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
@@ -183,12 +204,12 @@ jobs:
           --no-input
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: firefox-signed-${{ github.ref_name }}
+          name: firefox-signed-${{ env.RELEASE_TAG }}
           path: signed/*
           if-no-files-found: error
           retention-days: 30
       - run: |
-          echo "Firefox listed submission sent from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+          echo "Firefox listed submission sent from $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
           echo "Review status: https://addons.mozilla.org/developers/addons" >> "$GITHUB_STEP_SUMMARY"
 
   stores-disabled:

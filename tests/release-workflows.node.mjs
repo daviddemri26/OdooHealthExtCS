@@ -88,6 +88,7 @@ test('release isolates dependency builds from publishing privileges', async () =
   assert.doesNotMatch(attest, /actions\/checkout|pnpm install|contents: write/);
 
   assert.match(publish, /contents: write/);
+  assert.match(publish, /GH_REPO: \$\{\{ github\.repository \}\}/);
   assert.match(publish, /gh release (?:create|upload)/);
   assert.doesNotMatch(publish, /actions\/checkout|pnpm install|id-token: write/);
   assert.equal([...release.matchAll(/contents: write/g)].length, 1);
@@ -96,6 +97,24 @@ test('release isolates dependency builds from publishing privileges', async () =
   assert.match(chrome, /run: node scripts\/publish-chrome\.mjs/);
   assert.doesNotMatch(chrome, /pnpm\/action-setup|pnpm install|pnpm exec/);
   assert.match(firefox, /pnpm install --frozen-lockfile --ignore-scripts/);
+});
+
+test('release recovery rebuilds the exact immutable tag from main', async () => {
+  const release = await read('.github/workflows/release.yml');
+  const build = jobBlock(release, 'build');
+  const chrome = jobBlock(release, 'chrome');
+  const firefox = jobBlock(release, 'firefox');
+
+  assert.match(release, /workflow_dispatch:/);
+  assert.match(release, /release_tag:/);
+  assert.match(release, /RELEASE_TAG: \$\{\{ inputs\.release_tag \|\| github\.ref_name \}\}/);
+  assert.match(build, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  assert.match(build, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
+  assert.match(build, /git_sha=\$\(git rev-parse HEAD\)/);
+  assert.match(build, /RELEASE_GIT_SHA: \$\{\{ steps\.identity\.outputs\.git_sha \}\}/);
+  assert.match(chrome, /RELEASE_GIT_SHA: \$\{\{ needs\.build\.outputs\.git_sha \}\}/);
+  assert.match(firefox, /RELEASE_GIT_SHA: \$\{\{ needs\.build\.outputs\.git_sha \}\}/);
+  assert.doesNotMatch(release, /\$\{\{ github\.sha \}\}|\$GITHUB_REF_NAME/);
 });
 
 test('Firefox recovery binds every release asset to the exact tag build identity', async () => {
