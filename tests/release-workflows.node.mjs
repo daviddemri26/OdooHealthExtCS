@@ -99,7 +99,7 @@ test('release isolates dependency builds from publishing privileges', async () =
   assert.match(firefox, /pnpm install --frozen-lockfile --ignore-scripts/);
 });
 
-test('release recovery rebuilds the exact immutable tag from main', async () => {
+test('release recovery reuses only the original attested tag artifacts', async () => {
   const release = await read('.github/workflows/release.yml');
   const build = jobBlock(release, 'build');
   const chrome = jobBlock(release, 'chrome');
@@ -107,13 +107,29 @@ test('release recovery rebuilds the exact immutable tag from main', async () => 
 
   assert.match(release, /workflow_dispatch:/);
   assert.match(release, /release_tag:/);
+  assert.match(release, /source_run_id:/);
   assert.match(release, /RELEASE_TAG: \$\{\{ inputs\.release_tag \|\| github\.ref_name \}\}/);
   assert.match(build, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
-  assert.match(build, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
+  assert.match(build, /ref: refs\/tags\/\$\{\{ env\.RELEASE_TAG \}\}/);
   assert.match(build, /git_sha=\$\(git rev-parse HEAD\)/);
+  assert.match(build, /gh run download "\$SOURCE_RUN_ID"/);
+  assert.match(build, /\.event == "push"/);
+  assert.match(build, /\.head_branch == \$tag/);
+  assert.match(build, /\.head_sha == \$sha/);
+  assert.match(build, /\.path == "\.github\/workflows\/release\.yml"/);
+  assert.match(build, /\.name == "build" and \.conclusion == "success"/);
+  assert.match(build, /\.name == "attest" and \.conclusion == "success"/);
+  assert.match(build, /\.name == "publish-github" and \.conclusion == "failure"/);
+  assert.match(build, /\.name == "chrome"/);
+  assert.match(build, /startswith\("Firefox —"\)/);
+  assert.match(build, /gh attestation verify/);
+  assert.match(build, /--source-ref "\$RELEASE_SOURCE_REF"/);
+  assert.match(build, /--source-digest "\$RELEASE_GIT_SHA"/);
   assert.match(build, /RELEASE_GIT_SHA: \$\{\{ steps\.identity\.outputs\.git_sha \}\}/);
   assert.match(chrome, /RELEASE_GIT_SHA: \$\{\{ needs\.build\.outputs\.git_sha \}\}/);
   assert.match(firefox, /RELEASE_GIT_SHA: \$\{\{ needs\.build\.outputs\.git_sha \}\}/);
+  assert.match(release, /if: \$\{\{ github\.event_name == 'push' \}\}[\s\S]*?pnpm package/);
+  assert.match(release, /needs\.attest\.result == 'skipped'/);
   assert.doesNotMatch(release, /\$\{\{ github\.sha \}\}|\$GITHUB_REF_NAME/);
 });
 

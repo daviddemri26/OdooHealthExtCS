@@ -9,6 +9,10 @@ on:
         description: Existing immutable release tag to recover
         required: true
         type: string
+      source_run_id:
+        description: Failed tag release run whose build and attestation succeeded
+        required: true
+        type: string
 
 env:
   RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
@@ -24,6 +28,8 @@ jobs:
   build:
     permissions:
       contents: read
+      actions: read
+      attestations: read
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
@@ -37,10 +43,11 @@ jobs:
         run: |
           test "$GITHUB_REF" = "refs/heads/main"
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${{ inputs.source_run_id }}" =~ ^[1-9][0-9]*$ ]]
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
+          ref: refs/tags/${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
@@ -49,13 +56,61 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - if: ${{ github.event_name == 'push' }}
+        run: pnpm install --frozen-lockfile
       - id: version
         run: node -p '"version=" + require("./package.json").version' >> "$GITHUB_OUTPUT"
       - id: identity
         run: echo "git_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - run: pnpm package
-      - run: pnpm verify:release-version
+      - if: ${{ github.event_name == 'push' }}
+        run: pnpm package
+      - if: ${{ github.event_name == 'push' }}
+        run: pnpm verify:release-version
+      - name: Recover the original attested release assets
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          RELEASE_GIT_SHA: ${{ steps.identity.outputs.git_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg sha "$RELEASE_GIT_SHA" \
+            '.event == "push" and .head_branch == $tag and .head_sha == $sha and .path == ".github/workflows/release.yml" and .status == "completed"' \
+            <<< "$run_json" >/dev/null
+          jobs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")"
+          jq -e \
+            'any(.jobs[]; .name == "build" and .conclusion == "success") and
+             any(.jobs[]; .name == "attest" and .conclusion == "success") and
+             any(.jobs[]; .name == "publish-github" and .conclusion == "failure") and
+             ([.jobs[] | select((.name == "chrome" or (.name | startswith("Firefox —"))) and .conclusion == "success")] | length == 0)' \
+            <<< "$jobs_json" >/dev/null
+          gh run download "$SOURCE_RUN_ID" \
+            --name release-assets \
+            --dir artifacts \
+            --repo "$GH_REPO"
+      - name: Verify the original tag provenance
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_GIT_SHA: ${{ steps.identity.outputs.git_sha }}
+          RELEASE_SIGNER_WORKFLOW: github.com/${{ github.repository }}/.github/workflows/release.yml
+          RELEASE_SOURCE_REF: refs/tags/${{ env.RELEASE_TAG }}
+        run: |
+          for artifact in artifacts/*; do
+            test -f "$artifact"
+            gh attestation verify "$artifact" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$RELEASE_SIGNER_WORKFLOW" \
+              --signer-digest "$RELEASE_GIT_SHA" \
+              --source-digest "$RELEASE_GIT_SHA" \
+              --source-ref "$RELEASE_SOURCE_REF" \
+              --predicate-type "https://slsa.dev/provenance/v1" \
+              --deny-self-hosted-runners
+          done
       - env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_GIT_SHA: ${{ steps.identity.outputs.git_sha }}
@@ -70,6 +125,7 @@ jobs:
           retention-days: 30
   attest:
     needs: build
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -87,6 +143,7 @@ jobs:
 
   publish-github:
     needs: [build, attest]
+    if: ${{ always() && needs.build.result == 'success' && (needs.attest.result == 'success' || needs.attest.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -126,7 +183,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
+          ref: refs/tags/${{ env.RELEASE_TAG }}
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
@@ -166,7 +223,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
+          ref: refs/tags/${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
