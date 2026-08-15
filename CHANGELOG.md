@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-15
+
 ### Added
 
 - Added an opt-in multi-year renewal workspace beside Odoo's native Renew button, with server-verified term eligibility, editable discounts, native renewal/copy/discount operations, volatile Share links, inline progress, clipboard actions, and safe partial-result handling without leaving the subscription.
