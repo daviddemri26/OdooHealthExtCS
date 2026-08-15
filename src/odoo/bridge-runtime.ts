@@ -2,6 +2,7 @@ import {
   ODOO_BRIDGE_CHANNEL,
   ODOO_BRIDGE_ORIGIN,
   ODOO_BRIDGE_VERSION,
+  CANONICAL_HEALTH_NAMES,
   bridgeFailure,
   isOdooBridgeRequest,
   validateOdooBridgeCall,
@@ -9,6 +10,12 @@ import {
   type OdooBridgeFailure,
   type OdooBridgeResponse,
 } from './bridge-protocol';
+import {
+  CUSTOMER_DATA_RPC_TIMEOUT_MS,
+  type CustomerDataBridgeOperation,
+  type CustomerDataSubscriptionState,
+} from './customer-data-contracts';
+import { RenewalOwnershipRegistry, executeOdooRenewalOperation } from './renewal-runtime';
 
 interface JsonRpcSuccess {
   jsonrpc: '2.0';
@@ -211,6 +218,18 @@ export async function executeOdooBridgeCall(
   const validation = validateOdooBridgeCall(call);
   if (!validation.ok) return validation;
 
+  return executeTrustedOdooBridgeCall(call, options);
+}
+
+async function executeTrustedOdooBridgeCall(
+  call: OdooBridgeCall,
+  options: {
+    fetcher?: typeof fetch;
+    origin?: string;
+    timeoutMs?: number;
+    requestId?: string;
+  } = {},
+): Promise<BridgeExecutionResult> {
   const origin = options.origin ?? window.location.origin;
   if (origin !== ODOO_BRIDGE_ORIGIN) {
     return { ok: false, failure: bridgeFailure('incompatible_endpoint') };
@@ -293,6 +312,323 @@ export async function executeOdooBridgeCall(
     return { ok: false, failure: bridgeFailure('network') };
   } finally {
     globalThis.clearTimeout(timeout);
+  }
+}
+
+const CUSTOMER_DATA_ALLOWED_STATES = new Set<CustomerDataSubscriptionState>([
+  '3_progress',
+  '4_paused',
+]);
+
+interface CustomerDataRuntimeOptions {
+  fetcher?: typeof fetch;
+  origin?: string;
+  timeoutMs?: number;
+  requestId?: string;
+}
+
+function isBridgeFailure(value: unknown): value is OdooBridgeFailure {
+  return isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
+}
+
+async function customerDataCall(
+  call: OdooBridgeCall,
+  options: CustomerDataRuntimeOptions,
+): Promise<unknown> {
+  const result = await executeTrustedOdooBridgeCall(call, {
+    ...options,
+    timeoutMs: options.timeoutMs ?? CUSTOMER_DATA_RPC_TIMEOUT_MS,
+  });
+  if (!result.ok) throw result.failure;
+  return result.result;
+}
+
+function exactSingleRecord(value: unknown): Record<string, unknown> {
+  if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0])) {
+    throw bridgeFailure('incompatible_response');
+  }
+  return value[0];
+}
+
+function getAllowedSubscriptionState(
+  record: Record<string, unknown>,
+): CustomerDataSubscriptionState {
+  const state = record.subscription_state;
+  if (
+    typeof state !== 'string' ||
+    !CUSTOMER_DATA_ALLOWED_STATES.has(state as CustomerDataSubscriptionState)
+  ) {
+    throw bridgeFailure('access_denied');
+  }
+  return state as CustomerDataSubscriptionState;
+}
+
+function exactPositiveIds(value: unknown): number[] {
+  if (!Array.isArray(value) || !value.every(isPositiveId) || new Set(value).size !== value.length) {
+    throw bridgeFailure('incompatible_response');
+  }
+  return [...value];
+}
+
+async function resolveCanonicalHealthTags(
+  options: CustomerDataRuntimeOptions,
+): Promise<Record<'high' | 'medium' | 'low', number>> {
+  const records = await customerDataCall(
+    {
+      model: 'crm.tag',
+      method: 'search_read',
+      args: [[['name', 'in', [...CANONICAL_HEALTH_NAMES]]]],
+      kwargs: { fields: ['id', 'name'], limit: 20 },
+    },
+    options,
+  );
+  if (!Array.isArray(records)) throw bridgeFailure('incompatible_response');
+  const byName = (name: string): number => {
+    const matches = records.filter(
+      (record) => isRecord(record) && record.name === name && isPositiveId(record.id),
+    );
+    if (matches.length !== 1 || !matches[0] || !isPositiveId(matches[0].id)) {
+      throw bridgeFailure('incompatible_response');
+    }
+    return matches[0].id;
+  };
+  return {
+    high: byName('Health - High'),
+    medium: byName('Health - Medium'),
+    low: byName('Health - Low'),
+  };
+}
+
+async function readHealthOrder(
+  sourceOrderId: number,
+  options: CustomerDataRuntimeOptions,
+): Promise<{ tagIds: number[]; state: CustomerDataSubscriptionState }> {
+  const result = await customerDataCall(
+    {
+      model: 'sale.order',
+      method: 'read',
+      args: [[sourceOrderId], ['tag_ids', 'subscription_state']],
+      kwargs: {},
+    },
+    options,
+  );
+  const record = exactSingleRecord(result);
+  return {
+    tagIds: exactPositiveIds(record.tag_ids),
+    state: getAllowedSubscriptionState(record),
+  };
+}
+
+function healthRelationCommands(canonicalIds: number[], restoreIds: number[]): number[][] {
+  return [...canonicalIds.map((id) => [3, id]), ...restoreIds.map((id) => [4, id])];
+}
+
+function sameIdSet(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort((a, b) => a - b);
+  const rightSorted = [...right].sort((a, b) => a - b);
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
+function requireCanonicalSubset(ids: number[], canonicalIds: number[]): void {
+  const allowed = new Set(canonicalIds);
+  if (ids.length > canonicalIds.length || ids.some((id) => !allowed.has(id))) {
+    throw bridgeFailure('incompatible_response');
+  }
+}
+
+function linkedPartnerId(record: Record<string, unknown>): number {
+  const partner = record.partner_id;
+  if (!Array.isArray(partner) || partner.length !== 2 || !isSignedNonzeroId(partner[0])) {
+    throw bridgeFailure('incompatible_response');
+  }
+  return partner[0];
+}
+
+async function readIndustryOrder(
+  sourceOrderId: number,
+  options: CustomerDataRuntimeOptions,
+): Promise<{ partnerId: number; state: CustomerDataSubscriptionState }> {
+  const result = await customerDataCall(
+    {
+      model: 'sale.order',
+      method: 'read',
+      args: [[sourceOrderId], ['partner_id', 'subscription_state']],
+      kwargs: {},
+    },
+    options,
+  );
+  const record = exactSingleRecord(result);
+  return {
+    partnerId: linkedPartnerId(record),
+    state: getAllowedSubscriptionState(record),
+  };
+}
+
+function many2OneId(value: unknown): number | null {
+  if (value === false) return null;
+  if (Array.isArray(value) && value.length === 2 && isPositiveId(value[0])) return value[0];
+  throw bridgeFailure('incompatible_response');
+}
+
+async function readPartnerIndustry(
+  partnerId: number,
+  options: CustomerDataRuntimeOptions,
+): Promise<number | null> {
+  const result = await customerDataCall(
+    {
+      model: 'res.partner',
+      method: 'read',
+      args: [[partnerId], ['industry_id']],
+      kwargs: {},
+    },
+    options,
+  );
+  return many2OneId(exactSingleRecord(result).industry_id);
+}
+
+async function requireIndustryExists(
+  industryId: number | null,
+  options: CustomerDataRuntimeOptions,
+): Promise<void> {
+  if (industryId === null) return;
+  const result = await customerDataCall(
+    {
+      model: 'res.partner.industry',
+      method: 'read',
+      args: [[industryId], ['name']],
+      kwargs: {},
+    },
+    options,
+  );
+  const record = exactSingleRecord(result);
+  if (record.id !== industryId) throw bridgeFailure('incompatible_response');
+}
+
+async function requireSuccessfulWrite(
+  call: OdooBridgeCall,
+  options: CustomerDataRuntimeOptions,
+): Promise<void> {
+  const result = await customerDataCall(call, options);
+  if (result !== true) throw bridgeFailure('server_error');
+}
+
+export async function executeOdooCustomerDataOperation(
+  operation: CustomerDataBridgeOperation,
+  options: CustomerDataRuntimeOptions = {},
+): Promise<BridgeExecutionResult> {
+  try {
+    if (operation.name === 'applyHealthState') {
+      const [tags, order] = await Promise.all([
+        resolveCanonicalHealthTags(options),
+        readHealthOrder(operation.sourceOrderId, options),
+      ]);
+      const canonicalIds = [tags.high, tags.medium, tags.low];
+      const beforeHealthTagIds = order.tagIds.filter((id) => canonicalIds.includes(id));
+      const appliedHealthTagIds = operation.nextState ? [tags[operation.nextState]] : [];
+      await requireSuccessfulWrite(
+        {
+          model: 'sale.order',
+          method: 'write',
+          args: [
+            [operation.sourceOrderId],
+            { tag_ids: healthRelationCommands(canonicalIds, appliedHealthTagIds) },
+          ],
+          kwargs: {},
+        },
+        options,
+      );
+      return {
+        ok: true,
+        result: {
+          sourceOrderId: operation.sourceOrderId,
+          beforeHealthTagIds,
+          appliedHealthTagIds,
+          state: operation.nextState,
+        },
+      };
+    }
+
+    if (operation.name === 'undoHealthState') {
+      const [tags, order] = await Promise.all([
+        resolveCanonicalHealthTags(options),
+        readHealthOrder(operation.sourceOrderId, options),
+      ]);
+      const canonicalIds = [tags.high, tags.medium, tags.low];
+      requireCanonicalSubset(operation.expectedAppliedHealthTagIds, canonicalIds);
+      requireCanonicalSubset(operation.restoreHealthTagIds, canonicalIds);
+      const currentHealthTagIds = order.tagIds.filter((id) => canonicalIds.includes(id));
+      if (!sameIdSet(currentHealthTagIds, operation.expectedAppliedHealthTagIds)) {
+        return { ok: true, result: { restored: false } };
+      }
+      await requireSuccessfulWrite(
+        {
+          model: 'sale.order',
+          method: 'write',
+          args: [
+            [operation.sourceOrderId],
+            { tag_ids: healthRelationCommands(canonicalIds, operation.restoreHealthTagIds) },
+          ],
+          kwargs: {},
+        },
+        options,
+      );
+      return { ok: true, result: { restored: true } };
+    }
+
+    if (operation.name === 'applyIndustry') {
+      const order = await readIndustryOrder(operation.sourceOrderId, options);
+      if (order.partnerId !== operation.expectedPartnerId) throw bridgeFailure('access_denied');
+      const [beforeIndustryId] = await Promise.all([
+        readPartnerIndustry(order.partnerId, options),
+        requireIndustryExists(operation.nextIndustryId, options),
+      ]);
+      await requireSuccessfulWrite(
+        {
+          model: 'res.partner',
+          method: 'write',
+          args: [[order.partnerId], { industry_id: operation.nextIndustryId ?? false }],
+          kwargs: {},
+        },
+        options,
+      );
+      return {
+        ok: true,
+        result: {
+          sourceOrderId: operation.sourceOrderId,
+          partnerId: order.partnerId,
+          beforeIndustryId,
+          appliedIndustryId: operation.nextIndustryId,
+        },
+      };
+    }
+
+    const order = await readIndustryOrder(operation.sourceOrderId, options);
+    if (order.partnerId !== operation.expectedPartnerId) {
+      return { ok: true, result: { restored: false } };
+    }
+    const [currentIndustryId] = await Promise.all([
+      readPartnerIndustry(order.partnerId, options),
+      requireIndustryExists(operation.restoreIndustryId, options),
+    ]);
+    if (currentIndustryId !== operation.expectedAppliedIndustryId) {
+      return { ok: true, result: { restored: false } };
+    }
+    await requireSuccessfulWrite(
+      {
+        model: 'res.partner',
+        method: 'write',
+        args: [[order.partnerId], { industry_id: operation.restoreIndustryId ?? false }],
+        kwargs: {},
+      },
+      options,
+    );
+    return { ok: true, result: { restored: true } };
+  } catch (failure) {
+    return {
+      ok: false,
+      failure: isBridgeFailure(failure) ? failure : bridgeFailure('server_error'),
+    };
   }
 }
 
@@ -398,6 +734,7 @@ export function installOdooBridge(pageWindow: Window = window): () => void {
   previous?.dispose();
 
   const controller = new AbortController();
+  const renewalOwnership = new RenewalOwnershipRegistry();
   const handleMessage = (event: MessageEvent): void => {
     if (
       pageWindow.location.origin !== ODOO_BRIDGE_ORIGIN ||
@@ -426,7 +763,15 @@ export function installOdooBridge(pageWindow: Window = window): () => void {
     const execution =
       request.kind === 'probe'
         ? executeOdooConnectionProbe({ requestId: request.requestId })
-        : executeOdooBridgeCall(request.call, { requestId: request.requestId });
+        : request.kind === 'customerData'
+          ? executeOdooCustomerDataOperation(request.operation, { requestId: request.requestId })
+          : request.kind === 'renewal'
+            ? executeOdooRenewalOperation(request.operation, {
+                requestId: request.requestId,
+                clientId: request.clientId,
+                ownership: renewalOwnership,
+              })
+            : executeOdooBridgeCall(request.call, { requestId: request.requestId });
     void execution.then((result) => {
       if (controller.signal.aborted) return;
       const response: OdooBridgeResponse = {

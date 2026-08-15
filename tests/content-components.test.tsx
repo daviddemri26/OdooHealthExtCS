@@ -187,7 +187,7 @@ describe('content controls', () => {
     }
   });
 
-  it('automatically dismisses an error message', () => {
+  it('keeps error messages visible until they are dismissed', () => {
     vi.useFakeTimers();
     try {
       const dismiss = vi.fn();
@@ -197,14 +197,14 @@ describe('content controls', () => {
           onDismiss={dismiss}
         />,
       );
-      act(() => vi.advanceTimersByTime(8_000));
-      expect(dismiss).toHaveBeenCalledOnce();
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(dismiss).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('automatically dismisses a warning message', () => {
+  it('keeps warning messages visible until they are dismissed', () => {
     vi.useFakeTimers();
     try {
       const dismiss = vi.fn();
@@ -214,10 +214,8 @@ describe('content controls', () => {
           onDismiss={dismiss}
         />,
       );
-      act(() => vi.advanceTimersByTime(7_999));
+      act(() => vi.advanceTimersByTime(60_000));
       expect(dismiss).not.toHaveBeenCalled();
-      act(() => vi.advanceTimersByTime(1));
-      expect(dismiss).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
@@ -239,6 +237,38 @@ describe('content controls', () => {
       act(() => vi.advanceTimersByTime(10_000));
       expect(dismiss).not.toHaveBeenCalled();
       fireEvent.mouseLeave(status);
+      act(() => vi.advanceTimersByTime(3_999));
+      expect(dismiss).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(dismiss).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pauses automatic dismissal while focus remains inside the message', () => {
+    vi.useFakeTimers();
+    try {
+      const dismiss = vi.fn();
+      const view = render(
+        <StatusBar
+          status={{
+            id: 'status-focus',
+            kind: 'success',
+            message: 'Saved.',
+            action: { label: 'Undo', run: vi.fn() },
+            dismissAfterMs: 7_000,
+          }}
+          onDismiss={dismiss}
+        />,
+      );
+      const action = within(view.container).getByRole('button', { name: 'Undo' });
+      act(() => vi.advanceTimersByTime(3_000));
+      fireEvent.focus(action, { relatedTarget: null });
+      act(() => vi.advanceTimersByTime(10_000));
+      expect(dismiss).not.toHaveBeenCalled();
+
+      fireEvent.blur(action, { relatedTarget: document.body });
       act(() => vi.advanceTimersByTime(3_999));
       expect(dismiss).not.toHaveBeenCalled();
       act(() => vi.advanceTimersByTime(1));

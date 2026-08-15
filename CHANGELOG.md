@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in multi-year renewal workspace beside Odoo's native Renew button, with server-verified term eligibility, editable discounts, native renewal/copy/discount operations, volatile Share links, inline progress, clipboard actions, and safe partial-result handling without leaving the subscription.
+- Added versioned Renewals preferences with disabled-by-default activation, configurable two- through five-year discount presets, and optional success confirmations.
+- Added dynamic updates for an already-rendered native Renewal Quote smart-button counter; the extension never synthesizes a missing smart button.
+
+### Changed
+
+- Extended the independent Account Health and Industry form policies to exact In Progress and Paused subscriptions while keeping Renewals restricted to server-confirmed In Progress subscriptions.
+- Replaced Health and Industry's generic write path with closed, feature-specific mutations that revalidate status, preserve unrelated tags, verify the linked partner, and refuse stale Undo operations.
+- Made settings writes field-scoped and serialized, kept the one-year renewal preset fixed at zero, and hardened popup hydration, focus, toast timing, blocked-tab feedback, and SPA mutation ownership.
+- Limited each renewal run to the Copy actions it actually needs and released its page-bridge ownership state after completion.
+
+### Security
+
+- Restricted source archives to tracked regular Git files, rejected symlinks, recorded the exact archive entry manifest, and verified release checksums, Git identity, and provenance before store submission or recovery.
+- Pinned privileged GitHub Actions to verified commits, reduced job permissions, and made Firefox sign the exact prebuilt release artifact instead of rebuilding it.
+- Updated the image-generation and build dependency chain, pinned the patched Nano ID release, and made the default icon task verify approved pixels without rewriting public assets.
+- Kept renewal Share URLs and quotation results in volatile tab memory only, with no new permission, worker, analytics, external service, or public-site change.
+
+### Fixed
+
+- Made timeout reconciliation perform its required first read deterministically and added an explicit safety margin between renewal-operation and gateway timeouts.
+- Prevented stale Health, Industry, settings, toast, and Undo state from leaking into another Odoo record after SPA navigation.
+
 ## [1.2.1] - 2026-08-13
 
 ### Fixed

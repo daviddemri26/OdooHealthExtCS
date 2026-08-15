@@ -51,19 +51,43 @@ export function isRenderedSubscriptionForm(pathname: string, root: ParentNode = 
   );
 }
 
-function normalizeStatusLabel(value: string | null | undefined): string {
-  return value?.replace(/\s+/g, ' ').trim().toLocaleLowerCase() ?? '';
+/** Resolves the rendered subscription record without deciding feature eligibility. */
+export function getRenderedSubscriptionRoute(
+  location: Pick<Location, 'hostname' | 'pathname'>,
+  root: ParentNode = document,
+): SubscriptionRoute | null {
+  const route = parseSubscriptionRoute(location);
+  return route && isRenderedSubscriptionForm(route.pathname, root) ? route : null;
 }
 
-export function hasInProgressSubscriptionBadge(root: ParentNode = document): boolean {
+export function isExactSubscriptionRoute(
+  route: SubscriptionRoute | null,
+  recordId: number,
+  pathname: string | null,
+): boolean {
+  return Boolean(route && route.recordId === recordId && route.pathname === pathname);
+}
+
+function normalizeStatusLabel(value: string | null | undefined): string {
+  return value?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+export function getRenderedSubscriptionStatusLabel(root: ParentNode = document): string | null {
   const fields = Array.from(
     root.querySelectorAll<HTMLElement>('.o_form_view [name="subscription_state"]'),
   );
-  return fields.some((field) => {
+  const labels = fields.flatMap((field) => {
     const badges = Array.from(field.querySelectorAll<HTMLElement>('.badge'));
-    const labels = badges.length > 0 ? badges : [field];
-    return labels.some((label) => normalizeStatusLabel(label.textContent) === 'in progress');
+    return (badges.length > 0 ? badges : [field])
+      .map((label) => normalizeStatusLabel(label.textContent))
+      .filter(Boolean);
   });
+  const unique = [...new Set(labels)];
+  return unique.length === 1 ? (unique[0] ?? null) : null;
+}
+
+export function hasInProgressSubscriptionBadge(root: ParentNode = document): boolean {
+  return getRenderedSubscriptionStatusLabel(root) === 'In Progress';
 }
 
 export function findOrderDateAnchor(root: ParentNode = document): HTMLElement | null {

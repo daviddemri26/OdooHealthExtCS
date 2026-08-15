@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   applyHealthChange,
@@ -10,6 +10,7 @@ import {
   undoHealthChange,
   type HealthTagMap,
 } from '../src/features/health/service';
+import { OdooGatewayError } from '../src/odoo/gateway';
 import { MockGateway } from './helpers/mock-gateway';
 
 const tags: HealthTagMap = { high: 11, medium: 12, low: 13 };
@@ -119,32 +120,50 @@ describe('account health service', () => {
     expect(gateway.searchCalls[1]).toMatchObject({ options: { limit: 2 } });
   });
 
-  it('writes the complete safe tag set', async () => {
+  it('delegates health changes to the closed mutation operation', async () => {
     const gateway = new MockGateway();
-    const change = await applyHealthChange(gateway, 42, tags, [5, 11], 'medium');
-    expect(change).toEqual({ before: [5, 11], applied: [5, 12], state: 'medium' });
-    expect(gateway.writes[0]).toEqual({
-      model: 'sale.order',
-      ids: [42],
-      values: { tag_ids: [[6, 0, [5, 12]]] },
-    });
+    gateway.healthMutationResult = {
+      sourceOrderId: 42,
+      beforeHealthTagIds: [11],
+      appliedHealthTagIds: [12],
+      state: 'medium',
+    };
+    const change = await applyHealthChange(gateway, 42, 'medium');
+    expect(change).toEqual({ before: [11], applied: [12], state: 'medium' });
+    expect(gateway.customerDataCalls).toEqual([
+      { name: 'applyHealthState', sourceOrderId: 42, nextState: 'medium' },
+    ]);
   });
 
-  it('surfaces a failed health write without changing local truth', async () => {
+  it('surfaces a failed closed health mutation without changing local truth', async () => {
     const gateway = new MockGateway();
-    gateway.writeResult = false;
-    await expect(applyHealthChange(gateway, 42, tags, [5, 11], 'medium')).rejects.toMatchObject({
+    vi.spyOn(gateway, 'applyHealthState').mockRejectedValue(
+      new OdooGatewayError('server_error', 'Odoo could not complete the request.'),
+    );
+    await expect(applyHealthChange(gateway, 42, 'medium')).rejects.toMatchObject({
       code: 'server_error',
     });
   });
 
-  it('undoes only when no external tag change has occurred', async () => {
+  it('undoes only when the closed mutation confirms the applied value is unchanged', async () => {
     const gateway = new MockGateway();
-    const change = { before: [5, 11], applied: [5, 12], state: 'medium' as const };
-    gateway.reads['sale.order'] = [{ id: 42, tag_ids: [12, 5] }];
+    const change = { before: [11], applied: [12], state: 'medium' as const };
     await expect(undoHealthChange(gateway, 42, change)).resolves.toBe(true);
-    gateway.reads['sale.order'] = [{ id: 42, tag_ids: [5, 12, 99] }];
+    gateway.healthUndoResult = false;
     await expect(undoHealthChange(gateway, 42, change)).resolves.toBe(false);
-    expect(gateway.writes).toHaveLength(1);
+    expect(gateway.customerDataCalls).toEqual([
+      {
+        name: 'undoHealthState',
+        sourceOrderId: 42,
+        expectedAppliedHealthTagIds: [12],
+        restoreHealthTagIds: [11],
+      },
+      {
+        name: 'undoHealthState',
+        sourceOrderId: 42,
+        expectedAppliedHealthTagIds: [12],
+        restoreHealthTagIds: [11],
+      },
+    ]);
   });
 });

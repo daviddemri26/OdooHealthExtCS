@@ -1,4 +1,5 @@
 import { OdooGatewayError } from '../../odoo/gateway';
+import type { CustomerDataGateway } from '../../odoo/customer-data-contracts';
 import type { Many2OneValue, OdooGateway, OdooRecord } from '../../shared/types';
 
 interface SaleOrderPartnerRecord extends OdooRecord {
@@ -22,6 +23,7 @@ export interface IndustryContext {
 }
 
 export interface AppliedIndustryChange {
+  sourceOrderId: number;
   partnerId: number;
   before: number | null;
   applied: number | null;
@@ -95,35 +97,29 @@ export async function loadIndustryContext(
 }
 
 export async function applyIndustryChange(
-  gateway: OdooGateway,
+  gateway: CustomerDataGateway,
+  sourceOrderId: number,
   context: IndustryContext,
   nextIndustryId: number | null,
 ): Promise<AppliedIndustryChange> {
-  const success = await gateway.write('res.partner', [context.partnerId], {
-    industry_id: nextIndustryId ?? false,
-  });
-  if (!success)
-    throw new OdooGatewayError('server_error', 'Odoo did not save the industry change.');
+  const result = await gateway.applyIndustry(sourceOrderId, context.partnerId, nextIndustryId);
   return {
-    partnerId: context.partnerId,
-    before: context.currentIndustryId,
-    applied: nextIndustryId,
+    sourceOrderId: result.sourceOrderId,
+    partnerId: result.partnerId,
+    before: result.beforeIndustryId,
+    applied: result.appliedIndustryId,
   };
 }
 
 export async function undoIndustryChange(
-  gateway: OdooGateway,
+  gateway: CustomerDataGateway,
   change: AppliedIndustryChange,
 ): Promise<boolean> {
-  const records = await gateway.read<PartnerRecord>(
-    'res.partner',
-    [change.partnerId],
-    ['industry_id'],
+  const result = await gateway.undoIndustry(
+    change.sourceOrderId,
+    change.partnerId,
+    change.applied,
+    change.before,
   );
-  const currentValue = records[0]?.industry_id;
-  const current = Array.isArray(currentValue) ? currentValue[0] : null;
-  if (current !== change.applied) return false;
-  return gateway.write('res.partner', [change.partnerId], {
-    industry_id: change.before ?? false,
-  });
+  return result.restored;
 }

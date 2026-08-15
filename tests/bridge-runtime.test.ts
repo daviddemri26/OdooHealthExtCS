@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   executeOdooBridgeCall,
+  executeOdooCustomerDataOperation,
   executeOdooConnectionProbe,
   installOdooBridge,
 } from '../src/odoo/bridge-runtime';
@@ -28,6 +29,10 @@ const readTagsCall: OdooBridgeCall = {
   args: [[42], ['tag_ids']],
   kwargs: {},
 };
+
+function rpcCallFromRequest(init: RequestInit | undefined): OdooBridgeCall {
+  return (JSON.parse(String(init?.body)) as { params: OdooBridgeCall }).params;
+}
 
 describe('MAIN-world Odoo bridge runtime', () => {
   it('replaces stale listeners and accepts messages only from the exact page source and origin', () => {
@@ -381,4 +386,247 @@ describe('MAIN-world Odoo bridge runtime', () => {
       ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
     },
   );
+
+  it('applies Health on Paused with precise relation commands that preserve unrelated tags', async () => {
+    const calls: OdooBridgeCall[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const call = rpcCallFromRequest(init);
+      calls.push(call);
+      const result =
+        call.model === 'crm.tag'
+          ? [
+              { id: 11, name: 'Health - High' },
+              { id: 12, name: 'Health - Medium' },
+              { id: 13, name: 'Health - Low' },
+            ]
+          : call.method === 'read'
+            ? [{ id: 42, tag_ids: [11, 90], subscription_state: '4_paused' }]
+            : true;
+      return jsonResponse({ jsonrpc: '2.0', id: null, result });
+    });
+
+    await expect(
+      executeOdooCustomerDataOperation(
+        { name: 'applyHealthState', sourceOrderId: 42, nextState: 'medium' },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: {
+        sourceOrderId: 42,
+        beforeHealthTagIds: [11],
+        appliedHealthTagIds: [12],
+        state: 'medium',
+      },
+    });
+    expect(calls.at(-1)).toEqual({
+      model: 'sale.order',
+      method: 'write',
+      args: [
+        [42],
+        {
+          tag_ids: [
+            [3, 11],
+            [3, 12],
+            [3, 13],
+            [4, 12],
+          ],
+        },
+      ],
+      kwargs: {},
+    });
+    expect(JSON.stringify(calls.at(-1))).not.toContain('[6,');
+    expect(JSON.stringify(calls.at(-1))).not.toContain('90');
+  });
+
+  it('rejects a Health mutation when the server state is no longer eligible', async () => {
+    const calls: OdooBridgeCall[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const call = rpcCallFromRequest(init);
+      calls.push(call);
+      const result =
+        call.model === 'crm.tag'
+          ? [
+              { id: 11, name: 'Health - High' },
+              { id: 12, name: 'Health - Medium' },
+              { id: 13, name: 'Health - Low' },
+            ]
+          : [{ id: 42, tag_ids: [11, 90], subscription_state: '7_closed' }];
+      return jsonResponse({ jsonrpc: '2.0', id: null, result });
+    });
+
+    await expect(
+      executeOdooCustomerDataOperation(
+        { name: 'applyHealthState', sourceOrderId: 42, nextState: 'medium' },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'access_denied' } });
+    expect(calls.some((call) => call.method === 'write')).toBe(false);
+  });
+
+  it('undoes Health despite unrelated concurrent tags but not after another Health change', async () => {
+    const run = async (tagIds: number[]) => {
+      const calls: OdooBridgeCall[] = [];
+      const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+        const call = rpcCallFromRequest(init);
+        calls.push(call);
+        const result =
+          call.model === 'crm.tag'
+            ? [
+                { id: 11, name: 'Health - High' },
+                { id: 12, name: 'Health - Medium' },
+                { id: 13, name: 'Health - Low' },
+              ]
+            : call.method === 'read'
+              ? [{ id: 42, tag_ids: tagIds, subscription_state: '3_progress' }]
+              : true;
+        return jsonResponse({ jsonrpc: '2.0', id: null, result });
+      });
+      const result = await executeOdooCustomerDataOperation(
+        {
+          name: 'undoHealthState',
+          sourceOrderId: 42,
+          expectedAppliedHealthTagIds: [12],
+          restoreHealthTagIds: [11],
+        },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN },
+      );
+      return { calls, result };
+    };
+
+    const unrelatedChange = await run([12, 90, 91]);
+    expect(unrelatedChange.result).toEqual({ ok: true, result: { restored: true } });
+    expect(unrelatedChange.calls.at(-1)?.args).toEqual([
+      [42],
+      {
+        tag_ids: [
+          [3, 11],
+          [3, 12],
+          [3, 13],
+          [4, 11],
+        ],
+      },
+    ]);
+
+    const healthChange = await run([13, 90]);
+    expect(healthChange.result).toEqual({ ok: true, result: { restored: false } });
+    expect(healthChange.calls.some((call) => call.method === 'write')).toBe(false);
+  });
+
+  it('revalidates the subscription partner before an Industry mutation', async () => {
+    const calls: OdooBridgeCall[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const call = rpcCallFromRequest(init);
+      calls.push(call);
+      return jsonResponse({
+        jsonrpc: '2.0',
+        id: null,
+        result: [{ id: 42, partner_id: [82, 'Changed'], subscription_state: '3_progress' }],
+      });
+    });
+
+    await expect(
+      executeOdooCustomerDataOperation(
+        {
+          name: 'applyIndustry',
+          sourceOrderId: 42,
+          expectedPartnerId: 81,
+          nextIndustryId: 9,
+        },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'access_denied' } });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ model: 'sale.order', method: 'read' });
+  });
+
+  it('applies Industry on Paused only to the revalidated linked partner', async () => {
+    const calls: OdooBridgeCall[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const call = rpcCallFromRequest(init);
+      calls.push(call);
+      let result: unknown;
+      if (call.model === 'sale.order') {
+        result = [{ id: 42, partner_id: [-81, 'Synthetic'], subscription_state: '4_paused' }];
+      } else if (call.model === 'res.partner' && call.method === 'read') {
+        result = [{ id: -81, industry_id: false }];
+      } else if (call.model === 'res.partner.industry') {
+        result = [{ id: 9, name: 'Technology' }];
+      } else {
+        result = true;
+      }
+      return jsonResponse({ jsonrpc: '2.0', id: null, result });
+    });
+
+    await expect(
+      executeOdooCustomerDataOperation(
+        {
+          name: 'applyIndustry',
+          sourceOrderId: 42,
+          expectedPartnerId: -81,
+          nextIndustryId: 9,
+        },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: {
+        sourceOrderId: 42,
+        partnerId: -81,
+        beforeIndustryId: null,
+        appliedIndustryId: 9,
+      },
+    });
+    expect(calls.at(-1)).toEqual({
+      model: 'res.partner',
+      method: 'write',
+      args: [[-81], { industry_id: 9 }],
+      kwargs: {},
+    });
+  });
+
+  it('undoes Industry only while both the partner and applied value still match', async () => {
+    const run = async (partnerId: number, currentIndustryId: number) => {
+      const calls: OdooBridgeCall[] = [];
+      const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+        const call = rpcCallFromRequest(init);
+        calls.push(call);
+        const result =
+          call.model === 'sale.order'
+            ? [{ id: 42, partner_id: [partnerId, 'Customer'], subscription_state: '3_progress' }]
+            : call.method === 'read'
+              ? [{ id: partnerId, industry_id: [currentIndustryId, 'Industry'] }]
+              : true;
+        return jsonResponse({ jsonrpc: '2.0', id: null, result });
+      });
+      const result = await executeOdooCustomerDataOperation(
+        {
+          name: 'undoIndustry',
+          sourceOrderId: 42,
+          expectedPartnerId: 81,
+          expectedAppliedIndustryId: 9,
+          restoreIndustryId: null,
+        },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN },
+      );
+      return { calls, result };
+    };
+
+    const unchanged = await run(81, 9);
+    expect(unchanged.result).toEqual({ ok: true, result: { restored: true } });
+    expect(unchanged.calls.at(-1)).toEqual({
+      model: 'res.partner',
+      method: 'write',
+      args: [[81], { industry_id: false }],
+      kwargs: {},
+    });
+
+    const changedValue = await run(81, 10);
+    expect(changedValue.result).toEqual({ ok: true, result: { restored: false } });
+    expect(changedValue.calls.some((call) => call.method === 'write')).toBe(false);
+
+    const changedPartner = await run(82, 9);
+    expect(changedPartner.result).toEqual({ ok: true, result: { restored: false } });
+    expect(changedPartner.calls).toHaveLength(1);
+  });
 });

@@ -1,35 +1,28 @@
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import archiver from 'archiver';
 import fg from 'fast-glob';
+
+import { listTrackedSourceFiles, readSourceEntries } from './artifact-inputs.mjs';
+import { assertSensitiveFiles } from './scan-sensitive.mjs';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8'));
 const version = packageJson.version;
 const artifactDirectory = path.join(projectRoot, 'artifacts');
 const normalizedDate = new Date('2000-01-01T00:00:00.000Z');
+const trackedSourceFiles = listTrackedSourceFiles(projectRoot);
+
+// Recheck the exact source-archive allow-list here so direct invocations cannot bypass the scan.
+await assertSensitiveFiles({ rootDirectory: projectRoot, relativePaths: trackedSourceFiles });
 
 await rm(artifactDirectory, { recursive: true, force: true });
 await mkdir(artifactDirectory, { recursive: true });
 
-async function createZip(sourceDirectory, destination, options = {}) {
-  const files = await fg('**/*', {
-    cwd: sourceDirectory,
-    onlyFiles: true,
-    dot: true,
-    ignore: options.ignore ?? [],
-  });
-  files.sort();
-  const entries = await Promise.all(
-    files.map(async (relativePath) => ({
-      relativePath,
-      contents: await readFile(path.join(sourceDirectory, relativePath)),
-    })),
-  );
-
+async function createZipFromEntries(entries, destination) {
   await new Promise((resolve, reject) => {
     const output = createWriteStream(destination);
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -48,35 +41,46 @@ async function createZip(sourceDirectory, destination, options = {}) {
   });
 }
 
+async function createDirectoryZip(sourceDirectory, destination) {
+  const files = await fg('**/*', {
+    cwd: sourceDirectory,
+    onlyFiles: true,
+    followSymbolicLinks: false,
+    dot: true,
+  });
+  files.sort();
+  const entries = await Promise.all(
+    files.map(async (relativePath) => {
+      const absolutePath = path.join(sourceDirectory, relativePath);
+      const fileStats = await lstat(absolutePath);
+      if (fileStats.isSymbolicLink() || !fileStats.isFile()) {
+        throw new Error(`Only regular build files may enter an artifact: ${relativePath}`);
+      }
+      return {
+        relativePath,
+        contents: await readFile(absolutePath),
+      };
+    }),
+  );
+  await createZipFromEntries(entries, destination);
+}
+
 const chromeName = `OdooHealthExtCS-v${version}-chrome.zip`;
 const firefoxName = `OdooHealthExtCS-v${version}-firefox.zip`;
 const sourceName = `OdooHealthExtCS-v${version}-source.zip`;
 
-await createZip(
+await createDirectoryZip(
   path.join(projectRoot, '.output/chrome-mv3'),
   path.join(artifactDirectory, chromeName),
 );
-await createZip(
+await createDirectoryZip(
   path.join(projectRoot, '.output/firefox-mv3'),
   path.join(artifactDirectory, firefoxName),
 );
-await createZip(projectRoot, path.join(artifactDirectory, sourceName), {
-  ignore: [
-    '.git/**',
-    '.DS_Store',
-    '.env',
-    '.env.*',
-    '.output/**',
-    '.pnpm-store/**',
-    '.wxt/**',
-    'artifacts/**',
-    'coverage/**',
-    'node_modules/**',
-    '*.log',
-    '*.crx',
-    '*.xpi',
-  ],
-});
+await createZipFromEntries(
+  readSourceEntries(projectRoot, trackedSourceFiles),
+  path.join(artifactDirectory, sourceName),
+);
 
 const names = [chromeName, firefoxName, sourceName];
 const entries = [];
@@ -98,6 +102,7 @@ const manifest = {
   gitSha,
   builtAt: new Date().toISOString(),
   targets: ['chrome-mv3', 'firefox-mv3'],
+  sourceFiles: trackedSourceFiles,
   files: entries,
 };
 

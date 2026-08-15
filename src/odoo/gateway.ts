@@ -4,7 +4,6 @@ import type {
   OdooFieldDefinition,
   OdooGateway,
   OdooRecord,
-  OdooValues,
 } from '../shared/types';
 import {
   ODOO_BRIDGE_CHANNEL,
@@ -12,10 +11,42 @@ import {
   ODOO_BRIDGE_VERSION,
   bridgeFailure,
   isOdooBridgeResponse,
+  parseCustomerDataUndoResult,
+  parseHealthMutationResult,
+  parseIndustryMutationResult,
+  parseRenewalCreatedQuoteResult,
+  parseRenewalDiscountApplyResult,
+  parseRenewalDiscountClearResult,
+  parseRenewalPreflightResult,
+  parseRenewalQuoteSummary,
+  parseRenewalShareLinkResult,
   type OdooBridgeCall,
   type OdooConnectionProbeResult,
   type OdooBridgeRequest,
 } from './bridge-protocol';
+import {
+  CUSTOMER_DATA_GATEWAY_TIMEOUT_MS,
+  type CustomerDataBridgeOperation,
+  type CustomerDataMutationGateway,
+  type CustomerDataUndoResult,
+  type HealthMutationResult,
+  type IndustryMutationResult,
+} from './customer-data-contracts';
+import type {
+  RenewalBridgeOperation,
+  RenewalCreatedQuoteResult,
+  RenewalDiscountApplyResult,
+  RenewalDiscountClearResult,
+  RenewalGateway,
+  RenewalPreflightResponse,
+  RenewalQuoteSummary,
+  RenewalShareLinkResult,
+  RenewalSourceFingerprint,
+  RenewalTargetYears,
+} from './renewal-contracts';
+import { RENEWAL_GATEWAY_TIMEOUT_MS } from './renewal-contracts';
+
+export { RENEWAL_GATEWAY_TIMEOUT_MS } from './renewal-contracts';
 
 interface BridgeWindow {
   readonly location: Pick<Location, 'origin'>;
@@ -31,7 +62,11 @@ interface PendingRequest {
 }
 
 type OutboundBridgeRequest =
-  { kind: 'ping' } | { kind: 'probe' } | { kind: 'call'; call: OdooBridgeCall };
+  | { kind: 'ping' }
+  | { kind: 'probe' }
+  | { kind: 'call'; call: OdooBridgeCall }
+  | { kind: 'customerData'; operation: CustomerDataBridgeOperation }
+  | { kind: 'renewal'; operation: RenewalBridgeOperation };
 
 export class OdooGatewayError extends Error {
   constructor(
@@ -49,7 +84,9 @@ function randomIdentifier(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-export class PageContextOdooGateway implements OdooGateway {
+export class PageContextOdooGateway
+  implements OdooGateway, CustomerDataMutationGateway, RenewalGateway
+{
   private readonly clientId = randomIdentifier('client');
   private readonly pending = new Map<string, PendingRequest>();
   private readonly handleMessageBound = (event: MessageEvent): void => this.handleMessage(event);
@@ -92,8 +129,164 @@ export class PageContextOdooGateway implements OdooGateway {
     });
   }
 
-  async write(model: string, ids: number[], values: OdooValues): Promise<boolean> {
-    return this.callKw<boolean>(model, 'write', [ids, values], {});
+  async applyHealthState(
+    sourceOrderId: number,
+    nextState: 'high' | 'medium' | 'low' | null,
+  ): Promise<HealthMutationResult> {
+    const result = await this.customerData({ name: 'applyHealthState', sourceOrderId, nextState });
+    const parsed = parseHealthMutationResult(result, sourceOrderId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async undoHealthState(
+    sourceOrderId: number,
+    expectedAppliedHealthTagIds: number[],
+    restoreHealthTagIds: number[],
+  ): Promise<CustomerDataUndoResult> {
+    const result = await this.customerData({
+      name: 'undoHealthState',
+      sourceOrderId,
+      expectedAppliedHealthTagIds,
+      restoreHealthTagIds,
+    });
+    const parsed = parseCustomerDataUndoResult(result);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async applyIndustry(
+    sourceOrderId: number,
+    expectedPartnerId: number,
+    nextIndustryId: number | null,
+  ): Promise<IndustryMutationResult> {
+    const result = await this.customerData({
+      name: 'applyIndustry',
+      sourceOrderId,
+      expectedPartnerId,
+      nextIndustryId,
+    });
+    const parsed = parseIndustryMutationResult(result, sourceOrderId, expectedPartnerId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async undoIndustry(
+    sourceOrderId: number,
+    expectedPartnerId: number,
+    expectedAppliedIndustryId: number | null,
+    restoreIndustryId: number | null,
+  ): Promise<CustomerDataUndoResult> {
+    const result = await this.customerData({
+      name: 'undoIndustry',
+      sourceOrderId,
+      expectedPartnerId,
+      expectedAppliedIndustryId,
+      restoreIndustryId,
+    });
+    const parsed = parseCustomerDataUndoResult(result);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async preflightRenewal(sourceOrderId: number): Promise<RenewalPreflightResponse> {
+    const result = await this.renewal({ name: 'preflightRenewal', sourceOrderId });
+    const parsed = parseRenewalPreflightResult(result, sourceOrderId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async createNativeRenewal(
+    sourceOrderId: number,
+    runId: string,
+    expected: RenewalSourceFingerprint,
+    requiredCopyYears: RenewalTargetYears[],
+    requiresDiscount: boolean,
+  ): Promise<RenewalCreatedQuoteResult> {
+    const result = await this.renewal({
+      name: 'createNativeRenewal',
+      sourceOrderId,
+      runId,
+      expected,
+      requiredCopyYears,
+      requiresDiscount,
+    });
+    const parsed = parseRenewalCreatedQuoteResult(result, sourceOrderId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async copyNativePlan(
+    sourceQuoteId: number,
+    years: RenewalTargetYears,
+    runId: string,
+  ): Promise<RenewalCreatedQuoteResult> {
+    const result = await this.renewal({
+      name: 'copyNativePlan',
+      sourceQuoteId,
+      years,
+      runId,
+    });
+    const parsed = parseRenewalCreatedQuoteResult(result, sourceQuoteId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async clearNativeMultiYearDiscount(
+    quoteId: number,
+    runId: string,
+  ): Promise<RenewalDiscountClearResult> {
+    const result = await this.renewal({
+      name: 'clearNativeMultiYearDiscount',
+      quoteId,
+      runId,
+    });
+    const parsed = parseRenewalDiscountClearResult(result);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async applyNativeGlobalDiscount(
+    quoteId: number,
+    percentageTenths: number,
+    runId: string,
+  ): Promise<RenewalDiscountApplyResult> {
+    const result = await this.renewal({
+      name: 'applyNativeGlobalDiscount',
+      quoteId,
+      percentageTenths,
+      runId,
+    });
+    const parsed = parseRenewalDiscountApplyResult(result);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async getNativeShareLink(quoteId: number, runId: string): Promise<RenewalShareLinkResult> {
+    const result = await this.renewal({
+      name: 'getNativeShareLink',
+      quoteId,
+      runId,
+    });
+    const parsed = parseRenewalShareLinkResult(result, quoteId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async readRenewalQuoteSummary(quoteId: number, runId: string): Promise<RenewalQuoteSummary> {
+    const result = await this.renewal({
+      name: 'readRenewalQuoteSummary',
+      quoteId,
+      runId,
+    });
+    const parsed = parseRenewalQuoteSummary(result, quoteId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async finishRenewalRun(runId: string): Promise<void> {
+    const result = await this.renewal({ name: 'finishRenewalRun', runId });
+    if (result !== true) throw this.incompatibleResponse();
   }
 
   async checkConnection(): Promise<OdooConnectionProbeResult> {
@@ -150,6 +343,29 @@ export class PageContextOdooGateway implements OdooGateway {
     return (await this.sendRequest({ kind: 'call', call }, this.timeoutMs, false)) as T;
   }
 
+  private async renewal(operation: RenewalBridgeOperation): Promise<unknown> {
+    await this.ensureReady();
+    return this.sendRequest(
+      { kind: 'renewal', operation },
+      Math.max(this.timeoutMs, RENEWAL_GATEWAY_TIMEOUT_MS),
+      false,
+    );
+  }
+
+  private async customerData(operation: CustomerDataBridgeOperation): Promise<unknown> {
+    await this.ensureReady();
+    return this.sendRequest(
+      { kind: 'customerData', operation },
+      Math.max(this.timeoutMs, CUSTOMER_DATA_GATEWAY_TIMEOUT_MS),
+      false,
+    );
+  }
+
+  private incompatibleResponse(): OdooGatewayError {
+    const failure = bridgeFailure('incompatible_response');
+    return new OdooGatewayError(failure.code, failure.message);
+  }
+
   private sendRequest(
     requestBody: OutboundBridgeRequest,
     timeoutMs: number,
@@ -168,10 +384,16 @@ export class PageContextOdooGateway implements OdooGateway {
       clientId: this.clientId,
       requestId,
     } as const;
-    const request: OdooBridgeRequest =
-      requestBody.kind === 'call'
-        ? { ...base, kind: 'call', call: requestBody.call }
-        : { ...base, kind: requestBody.kind };
+    let request: OdooBridgeRequest;
+    if (requestBody.kind === 'call') {
+      request = { ...base, kind: 'call', call: requestBody.call };
+    } else if (requestBody.kind === 'customerData') {
+      request = { ...base, kind: 'customerData', operation: requestBody.operation };
+    } else if (requestBody.kind === 'renewal') {
+      request = { ...base, kind: 'renewal', operation: requestBody.operation };
+    } else {
+      request = { ...base, kind: requestBody.kind };
+    }
 
     return new Promise((resolve, reject) => {
       const timeout = globalThis.setTimeout(() => {

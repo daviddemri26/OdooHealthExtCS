@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   ODOO_BRIDGE_CHANNEL,
@@ -7,7 +7,12 @@ import {
   type OdooBridgeRequest,
   type OdooBridgeResponse,
 } from '../src/odoo/bridge-protocol';
-import { OdooGatewayError, PageContextOdooGateway } from '../src/odoo/gateway';
+import {
+  OdooGatewayError,
+  PageContextOdooGateway,
+  RENEWAL_GATEWAY_TIMEOUT_MS,
+} from '../src/odoo/gateway';
+import type { RenewalGateway } from '../src/odoo/renewal-contracts';
 
 class FakeBridgeWindow {
   readonly location = { origin: ODOO_BRIDGE_ORIGIN };
@@ -52,6 +57,24 @@ class FakeBridgeWindow {
       result,
     });
   }
+
+  fail(request: OdooBridgeRequest, code: 'timeout' | 'incompatible_response'): void {
+    this.emit({
+      channel: ODOO_BRIDGE_CHANNEL,
+      version: ODOO_BRIDGE_VERSION,
+      direction: 'response',
+      clientId: request.clientId,
+      requestId: request.requestId,
+      ok: false,
+      failure: {
+        code,
+        message:
+          code === 'timeout'
+            ? 'The Odoo request timed out. Please retry.'
+            : 'This Odoo version returned an unsupported response.',
+      },
+    });
+  }
 }
 
 function enablePing(window: FakeBridgeWindow): void {
@@ -69,7 +92,37 @@ async function waitForCalls(window: FakeBridgeWindow, count: number): Promise<Od
   throw new Error(`Expected ${count} bridge calls.`);
 }
 
+async function waitForRenewals(
+  window: FakeBridgeWindow,
+  count: number,
+): Promise<OdooBridgeRequest[]> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const requests = window.posted.filter((request) => request.kind === 'renewal');
+    if (requests.length === count) return requests;
+    await Promise.resolve();
+  }
+  throw new Error(`Expected ${count} renewal bridge requests.`);
+}
+
+async function waitForCustomerData(
+  window: FakeBridgeWindow,
+  count: number,
+): Promise<OdooBridgeRequest[]> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const requests = window.posted.filter((request) => request.kind === 'customerData');
+    if (requests.length === count) return requests;
+    await Promise.resolve();
+  }
+  throw new Error(`Expected ${count} customer-data bridge requests.`);
+}
+
 describe('page-context Odoo gateway', () => {
+  it('does not expose the retired generic write authority', () => {
+    const gateway = new PageContextOdooGateway(new FakeBridgeWindow());
+    expect('write' in gateway).toBe(false);
+    gateway.dispose();
+  });
+
   it('checks the general Odoo session independently from feature RPC calls', async () => {
     const bridgeWindow = new FakeBridgeWindow();
     bridgeWindow.responder = (request) => {
@@ -130,6 +183,242 @@ describe('page-context Odoo gateway', () => {
     await expect(second).resolves.toEqual([{ id: 42, partner_id: [7, 'Demo'] }]);
     expect(bridgeWindow.posted.filter((request) => request.kind === 'ping')).toHaveLength(1);
     gateway.dispose();
+  });
+
+  it('sends renewal work through the closed operation envelope', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.copyNativePlan(81, 5, 'renewal-12345678');
+    const [request] = await waitForRenewals(bridgeWindow, 1);
+    expect(request).toMatchObject({
+      kind: 'renewal',
+      operation: {
+        name: 'copyNativePlan',
+        sourceQuoteId: 81,
+        years: 5,
+        runId: 'renewal-12345678',
+      },
+    });
+    bridgeWindow.respond(request!, { quoteId: 82 });
+
+    await expect(pending).resolves.toEqual({ quoteId: 82 });
+    expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('sends customer mutations through exact closed operation envelopes', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.applyHealthState(42, 'low');
+    const [request] = await waitForCustomerData(bridgeWindow, 1);
+    expect(request).toMatchObject({
+      kind: 'customerData',
+      operation: { name: 'applyHealthState', sourceOrderId: 42, nextState: 'low' },
+    });
+    bridgeWindow.respond(request!, {
+      sourceOrderId: 42,
+      beforeHealthTagIds: [11],
+      appliedHealthTagIds: [13],
+      state: 'low',
+    });
+
+    await expect(pending).resolves.toEqual({
+      sourceOrderId: 42,
+      beforeHealthTagIds: [11],
+      appliedHealthTagIds: [13],
+      state: 'low',
+    });
+    expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('includes the frozen Discount requirement in the closed native Renew operation', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.createNativeRenewal(
+      42,
+      'renewal-12345678',
+      {
+        planId: 7,
+        currentContractMonths: 12,
+        writeDate: '2026-08-14 12:00:00',
+      },
+      [1, 5],
+      true,
+    );
+    const [request] = await waitForRenewals(bridgeWindow, 1);
+    expect(request).toMatchObject({
+      kind: 'renewal',
+      operation: {
+        name: 'createNativeRenewal',
+        sourceOrderId: 42,
+        runId: 'renewal-12345678',
+        expected: {
+          planId: 7,
+          currentContractMonths: 12,
+          writeDate: '2026-08-14 12:00:00',
+        },
+        requiredCopyYears: [1, 5],
+        requiresDiscount: true,
+      },
+    });
+    bridgeWindow.respond(request!, { quoteId: 82 });
+
+    await expect(pending).resolves.toEqual({ quoteId: 82 });
+    expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('sends run cleanup through its exact closed renewal operation', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.finishRenewalRun('renewal-12345678');
+    const [request] = await waitForRenewals(bridgeWindow, 1);
+    expect(request).toMatchObject({
+      kind: 'renewal',
+      operation: { name: 'finishRenewalRun', runId: 'renewal-12345678' },
+    });
+    bridgeWindow.respond(request!, true);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('rejects malformed results independently for every renewal operation', async () => {
+    const cases: {
+      invoke: (gateway: RenewalGateway) => Promise<unknown>;
+      invalidResult: unknown;
+    }[] = [
+      {
+        invoke: (gateway) => gateway.preflightRenewal(42),
+        invalidResult: {
+          eligible: true,
+          sourceOrderId: 42,
+          planId: 7,
+          renewalQuoteCount: 6,
+          writeDate: '2026-08-14 12:00:00',
+          billingPeriodValue: 1,
+          billingPeriodUnit: 'year',
+          currentContractMonths: 12,
+          allowedTargetYears: [2, 3, 4, 5],
+        },
+      },
+      {
+        invoke: (gateway) =>
+          gateway.createNativeRenewal(
+            42,
+            'renewal-12345678',
+            {
+              planId: 7,
+              currentContractMonths: 12,
+              writeDate: '2026-08-14 12:00:00',
+            },
+            [],
+            false,
+          ),
+        invalidResult: { quoteId: 42 },
+      },
+      {
+        invoke: (gateway) => gateway.copyNativePlan(81, 5, 'renewal-12345678'),
+        invalidResult: { quoteId: 81 },
+      },
+      {
+        invoke: (gateway) => gateway.clearNativeMultiYearDiscount(82, 'renewal-12345678'),
+        invalidResult: { removedLineCount: -1 },
+      },
+      {
+        invoke: (gateway) => gateway.applyNativeGlobalDiscount(82, 65, 'renewal-12345678'),
+        invalidResult: { createdLineCount: 0 },
+      },
+      {
+        invoke: (gateway) => gateway.getNativeShareLink(82, 'renewal-12345678'),
+        invalidResult: {
+          quoteId: 82,
+          shareLink: 'https://example.com/mail/view?model=sale.order&res_id=82&access_token=x',
+        },
+      },
+      {
+        invoke: (gateway) => gateway.readRenewalQuoteSummary(82, 'renewal-12345678'),
+        invalidResult: {
+          quoteId: 82,
+          createdFromQuoteId: 42,
+          name: 'SO2026/82',
+          state: 'draft',
+          subscriptionState: '2_renewal',
+          planId: 8,
+          billingPeriodValue: 5,
+          billingPeriodUnit: 'year',
+          currentContractMonths: 60,
+          templateId: 11,
+          currencyId: 2,
+          currencyRounding: 0.01,
+          amountUntaxed: 90,
+          amountTax: 0,
+          amountTotal: 90,
+          lineCount: 1,
+          multiYearDiscountLineCount: 0,
+          lines: [],
+        },
+      },
+      {
+        invoke: (gateway) => gateway.finishRenewalRun('renewal-12345678'),
+        invalidResult: { finished: true },
+      },
+    ];
+
+    for (const scenario of cases) {
+      const bridgeWindow = new FakeBridgeWindow();
+      enablePing(bridgeWindow);
+      const gateway = new PageContextOdooGateway(bridgeWindow);
+      const pending = scenario.invoke(gateway);
+      const [request] = await waitForRenewals(bridgeWindow, 1);
+      bridgeWindow.respond(request!, scenario.invalidResult);
+      await expect(pending).rejects.toMatchObject({ code: 'incompatible_response' });
+      gateway.dispose();
+    }
+  });
+
+  it('waits for the runtime renewal timeout response without retrying', async () => {
+    vi.useFakeTimers();
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow, 5, 20);
+    let settlement: unknown = 'pending';
+
+    try {
+      const pending = gateway.preflightRenewal(42).then(
+        (result) => {
+          settlement = result;
+        },
+        (error: unknown) => {
+          settlement = error;
+        },
+      );
+      const [request] = await waitForRenewals(bridgeWindow, 1);
+
+      await vi.advanceTimersByTimeAsync(15_500);
+      expect(settlement).toBe('pending');
+      expect(RENEWAL_GATEWAY_TIMEOUT_MS).toBeGreaterThan(15_500);
+      expect(bridgeWindow.posted.filter((posted) => posted.kind === 'renewal')).toHaveLength(1);
+
+      bridgeWindow.fail(request!, 'timeout');
+      await pending;
+      expect(settlement).toMatchObject({ code: 'timeout' });
+      await vi.advanceTimersByTimeAsync(RENEWAL_GATEWAY_TIMEOUT_MS);
+      expect(bridgeWindow.posted.filter((posted) => posted.kind === 'renewal')).toHaveLength(1);
+    } finally {
+      gateway.dispose();
+      vi.useRealTimers();
+    }
   });
 
   it('ignores foreign origins, clients, and stale request IDs', async () => {
@@ -210,15 +499,13 @@ describe('page-context Odoo gateway', () => {
       });
     };
 
-    await expect(
-      new PageContextOdooGateway(bridgeWindow).write('res.partner', [42], {
-        industry_id: false,
-      }),
-    ).rejects.toEqual(
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+    await expect(gateway.applyIndustry(42, 81, null)).rejects.toEqual(
       expect.objectContaining<Partial<OdooGatewayError>>({
         code: 'access_denied',
         message: 'Odoo did not allow this action. Check your record permissions.',
       }),
     );
+    gateway.dispose();
   });
 });

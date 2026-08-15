@@ -15,45 +15,46 @@ import {
   undoIndustryChange,
   type IndustryContext,
 } from '../features/industry/service';
+import type { CustomerDataGateway } from '../odoo/customer-data-contracts';
 import { OdooGatewayError } from '../odoo/gateway';
 import type { OdooFieldAnchor } from '../odoo/layout';
-import { saveSettings } from '../shared/settings';
+import { patchSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
   HealthState,
-  OdooGateway,
   StatusMessage,
   SubscriptionRoute,
 } from '../shared/types';
+import { createStatusMessage, STATUS_DURATIONS, StatusStore } from './status';
 
 interface ContentAppProps {
-  gateway: OdooGateway;
+  gateway: CustomerDataGateway;
   route: SubscriptionRoute | null;
+  isRouteCurrent: (route: SubscriptionRoute) => boolean;
+  healthEligible: boolean;
+  industryEligible: boolean;
   settings: ExtensionSettings;
   detectedTheme: 'light' | 'dark';
   anchor: OdooFieldAnchor | null;
   panelContainer: HTMLElement;
+  statusStore?: StatusStore;
 }
 
-const STATUS_DURATIONS: Record<StatusMessage['kind'], number> = {
-  success: 7_000,
-  error: 8_000,
-  warning: 8_000,
-  info: 6_000,
-};
+interface FeatureOwnership {
+  key: string;
+  generation: number;
+}
 
-function createMessage(
-  kind: StatusMessage['kind'],
-  message: string,
-  options: Pick<StatusMessage, 'action' | 'detail' | 'dismissAfterMs' | 'suppressAction'> = {},
-): StatusMessage {
-  return {
-    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-    kind,
-    message,
-    ...options,
-    dismissAfterMs: options.dismissAfterMs ?? STATUS_DURATIONS[kind],
-  };
+function refreshFeatureOwnership(ref: React.MutableRefObject<FeatureOwnership>, key: string): void {
+  if (ref.current.key === key) return;
+  ref.current = { key, generation: ref.current.generation + 1 };
+}
+
+function ownsFeature(
+  ref: React.MutableRefObject<FeatureOwnership>,
+  captured: FeatureOwnership,
+): boolean {
+  return ref.current.key === captured.key && ref.current.generation === captured.generation;
 }
 
 function publicError(error: unknown): { message: string; code: OdooGatewayError['code'] } {
@@ -71,7 +72,8 @@ export function StatusBar({
   const timerRef = useRef<number | null>(null);
   const remainingRef = useRef(0);
   const startedAtRef = useRef(0);
-  const hoveringRef = useRef(false);
+  const pointerPausedRef = useRef(false);
+  const focusPausedRef = useRef(false);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -82,7 +84,7 @@ export function StatusBar({
 
   const startTimer = useCallback(() => {
     clearTimer();
-    if (remainingRef.current <= 0 || hoveringRef.current) return;
+    if (remainingRef.current <= 0 || pointerPausedRef.current || focusPausedRef.current) return;
     startedAtRef.current = Date.now();
     timerRef.current = window.setTimeout(onDismiss, remainingRef.current);
   }, [clearTimer, onDismiss]);
@@ -93,7 +95,10 @@ export function StatusBar({
       : undefined;
     clearTimer();
     remainingRef.current = dismissAfterMs ?? 0;
-    if (!status) hoveringRef.current = false;
+    if (!status) {
+      pointerPausedRef.current = false;
+      focusPausedRef.current = false;
+    }
     if (dismissAfterMs) startTimer();
     return clearTimer;
   }, [clearTimer, startTimer, status]);
@@ -103,15 +108,20 @@ export function StatusBar({
 
   if (!status) return null;
 
-  const pauseTimer = (): void => {
-    hoveringRef.current = true;
+  const pauseTimer = (source: 'pointer' | 'focus'): void => {
+    const wasPaused = pointerPausedRef.current || focusPausedRef.current;
+    if (source === 'pointer') pointerPausedRef.current = true;
+    else focusPausedRef.current = true;
+    if (wasPaused) return;
     if (timerRef.current === null) return;
     remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAtRef.current));
     clearTimer();
   };
 
-  const resumeTimer = (): void => {
-    hoveringRef.current = false;
+  const resumeTimer = (source: 'pointer' | 'focus'): void => {
+    if (source === 'pointer') pointerPausedRef.current = false;
+    else focusPausedRef.current = false;
+    if (pointerPausedRef.current || focusPausedRef.current) return;
     startTimer();
   };
 
@@ -138,10 +148,22 @@ export function StatusBar({
   return (
     <div
       className={`status-bar status-${status.kind}`}
-      role="status"
-      aria-live="polite"
-      onMouseEnter={pauseTimer}
-      onMouseLeave={resumeTimer}
+      role={status.kind === 'error' ? 'alert' : 'status'}
+      aria-live={status.kind === 'error' ? 'assertive' : 'polite'}
+      onMouseEnter={() => pauseTimer('pointer')}
+      onMouseLeave={() => resumeTimer('pointer')}
+      onFocusCapture={(event) => {
+        const previousTarget = event.relatedTarget;
+        if (!(previousTarget instanceof Node) || !event.currentTarget.contains(previousTarget)) {
+          pauseTimer('focus');
+        }
+      }}
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+          resumeTimer('focus');
+        }
+      }}
     >
       <span className="status-copy">
         <strong className="status-title">{status.message}</strong>
@@ -432,10 +454,14 @@ export function IndustryField({
 export function ContentApp({
   gateway,
   route,
+  isRouteCurrent,
+  healthEligible,
+  industryEligible,
   settings,
   detectedTheme,
   anchor,
   panelContainer,
+  statusStore,
 }: ContentAppProps): React.JSX.Element | null {
   const [health, setHealth] = useState<HealthContext | null>(null);
   const [industry, setIndustry] = useState<IndustryContext | null>(null);
@@ -446,43 +472,82 @@ export function ContentApp({
   const [healthPending, setHealthPending] = useState(false);
   const [industryPending, setIndustryPending] = useState(false);
   const [industryOpen, setIndustryOpen] = useState(false);
-  const [status, setStatus] = useState<StatusMessage | null>(null);
-  const [readyRecordId, setReadyRecordId] = useState<number | null>(null);
+  const localStatusStoreRef = useRef<StatusStore | null>(null);
+  if (!localStatusStoreRef.current) localStatusStoreRef.current = new StatusStore();
+  const activeStatusStore = statusStore ?? localStatusStoreRef.current;
+  const ownedStatusIdsRef = useRef(new Set<string>());
+  const [status, setStatus] = useState<StatusMessage | null>(activeStatusStore.getSnapshot());
+  const [readyRouteKey, setReadyRouteKey] = useState<string | null>(null);
   const recordId = route?.recordId;
+  const routePathname = route?.pathname ?? '';
+  const routeKey = route ? `${route.recordId}:${route.pathname}` : null;
+  const healthOwnershipRef = useRef<FeatureOwnership>({ key: '', generation: 0 });
+  const industryOwnershipRef = useRef<FeatureOwnership>({ key: '', generation: 0 });
+  refreshFeatureOwnership(
+    healthOwnershipRef,
+    `${recordId ?? 'none'}:${routePathname}:${String(
+      settings.enabled && settings.features.health && healthEligible,
+    )}`,
+  );
+  refreshFeatureOwnership(
+    industryOwnershipRef,
+    `${recordId ?? 'none'}:${routePathname}:${String(
+      settings.enabled && settings.features.industry && industryEligible,
+    )}`,
+  );
 
-  const notify = useCallback((message: StatusMessage) => setStatus(message), []);
-  const dismissStatus = useCallback(() => setStatus(null), []);
+  useEffect(() => activeStatusStore.subscribe(setStatus), [activeStatusStore]);
+
+  const notify = useCallback(
+    (message: StatusMessage) => {
+      if (!activeStatusStore.notify(message)) return;
+      ownedStatusIdsRef.current.clear();
+      ownedStatusIdsRef.current.add(message.id);
+    },
+    [activeStatusStore],
+  );
+  const dismissStatus = useCallback(() => {
+    const current = activeStatusStore.getSnapshot();
+    if (current) ownedStatusIdsRef.current.delete(current.id);
+    activeStatusStore.dismiss(current?.id);
+  }, [activeStatusStore]);
+  const dismissOwnedStatus = useCallback(() => {
+    const current = activeStatusStore.getSnapshot();
+    if (current && ownedStatusIdsRef.current.has(current.id)) {
+      activeStatusStore.dismiss(current.id);
+    }
+    ownedStatusIdsRef.current.clear();
+  }, [activeStatusStore]);
   const disableSuccessToast = useCallback(
     async (feature: keyof ExtensionSettings['successToasts']): Promise<void> => {
       try {
-        await saveSettings({
-          ...settings,
-          successToasts: { ...settings.successToasts, [feature]: false },
-        });
-        dismissStatus();
+        await patchSettings({ successToasts: { [feature]: false } });
+        dismissOwnedStatus();
       } catch {
-        notify(createMessage('error', 'The confirmation preference could not be saved.'));
+        notify(createStatusMessage('error', 'The confirmation preference could not be saved.'));
       }
     },
-    [dismissStatus, notify, settings],
+    [dismissOwnedStatus, notify],
   );
 
   useEffect(() => {
-    setReadyRecordId(null);
+    setReadyRouteKey(null);
     setHealth(null);
     setIndustry(null);
     setHealthError(null);
     setIndustryError(null);
     setIndustryOpen(false);
-    setStatus(null);
+    dismissOwnedStatus();
     setHealthLoading(false);
     setIndustryLoading(false);
+    setHealthPending(false);
+    setIndustryPending(false);
     if (!recordId || !settings.enabled) return;
 
     let active = true;
     const load = async (): Promise<void> => {
       const tasks: Promise<void>[] = [];
-      if (settings.features.health) {
+      if (settings.features.health && healthEligible) {
         setHealthLoading(true);
         tasks.push(
           loadHealthContext(gateway, recordId)
@@ -491,7 +556,7 @@ export function ContentApp({
               setHealth(context);
               if (context.snapshot.duplicate) {
                 notify(
-                  createMessage(
+                  createStatusMessage(
                     'warning',
                     'Multiple health tags were found. Choose one value to clean them up.',
                   ),
@@ -502,13 +567,13 @@ export function ContentApp({
               if (!active) return;
               const failure = publicError(error);
               setHealthError(failure.message);
-              notify(createMessage('error', failure.message));
+              notify(createStatusMessage('error', failure.message));
             })
             .finally(() => active && setHealthLoading(false)),
         );
       }
 
-      if (settings.features.industry) {
+      if (settings.features.industry && industryEligible) {
         setIndustryLoading(true);
         tasks.push(
           loadIndustryContext(gateway, recordId)
@@ -527,7 +592,7 @@ export function ContentApp({
 
       await Promise.allSettled(tasks);
       if (active && tasks.length > 0) {
-        if (active) setReadyRecordId(recordId);
+        setReadyRouteKey(routeKey);
       }
     };
 
@@ -536,46 +601,54 @@ export function ContentApp({
       active = false;
     };
   }, [
+    activeStatusStore,
+    dismissOwnedStatus,
     gateway,
     notify,
     recordId,
+    routePathname,
+    routeKey,
     settings.enabled,
     settings.features.health,
     settings.features.industry,
+    healthEligible,
+    industryEligible,
   ]);
 
   const selectHealth = async (selected: Exclude<HealthState, null>): Promise<void> => {
-    if (!route || !health || healthPending) return;
+    if (!route || !health || healthPending || !healthEligible) return;
+    const ownership = { ...healthOwnershipRef.current };
+    const sourceRoute = route;
+    const ownsMutation = (): boolean =>
+      isRouteCurrent(sourceRoute) && ownsFeature(healthOwnershipRef, ownership);
+    const sourceOrderId = route.recordId;
     const next = !health.snapshot.duplicate && health.snapshot.state === selected ? null : selected;
     const previousHealth = health;
     const optimisticIds = prepareHealthTagIds(health.snapshot.tagIds, health.tags, next);
     setHealth({ ...health, snapshot: getHealthSnapshot(optimisticIds, health.tags) });
     setHealthPending(true);
     try {
-      const change = await applyHealthChange(
-        gateway,
-        route.recordId,
-        health.tags,
-        health.snapshot.tagIds,
-        next,
-      );
+      const change = await applyHealthChange(gateway, sourceOrderId, next);
+      if (!ownsMutation()) return;
       const message = next
         ? `Account health set to ${next[0]?.toUpperCase()}${next.slice(1)}.`
         : 'Account health cleared.';
       if (settings.successToasts.health) {
         notify(
-          createMessage('success', message, {
+          createStatusMessage('success', message, {
             detail:
               'The health indicator above is current.\nOdoo’s Tags field will update after the next page reload.',
             dismissAfterMs: 7_000,
             action: {
               label: 'Undo',
               run: async () => {
+                if (!ownsMutation()) return;
                 try {
-                  const restored = await undoHealthChange(gateway, route.recordId, change);
+                  const restored = await undoHealthChange(gateway, sourceOrderId, change);
+                  if (!ownsMutation()) return;
                   if (!restored) {
                     notify(
-                      createMessage(
+                      createStatusMessage(
                         'warning',
                         'Undo was not applied because the record changed elsewhere.',
                       ),
@@ -587,13 +660,14 @@ export function ContentApp({
                     snapshot: getHealthSnapshot(change.before, previousHealth.tags),
                   });
                   notify(
-                    createMessage('info', 'Previous account health restored.', {
+                    createStatusMessage('info', 'Previous account health restored.', {
                       dismissAfterMs: 4_000,
                     }),
                   );
                 } catch (error) {
+                  if (!ownsMutation()) return;
                   const failure = publicError(error);
-                  notify(createMessage('error', failure.message));
+                  notify(createStatusMessage('error', failure.message));
                 }
               },
             },
@@ -605,39 +679,54 @@ export function ContentApp({
         );
       }
     } catch (error) {
+      if (!ownsMutation()) return;
       setHealth(previousHealth);
       const failure = publicError(error);
-      notify(createMessage('error', failure.message));
+      notify(createStatusMessage('error', failure.message));
     } finally {
-      setHealthPending(false);
+      if (ownsMutation()) setHealthPending(false);
     }
   };
 
   const selectIndustry = async (industryId: number | null): Promise<void> => {
-    if (!industry || industryPending || industry.currentIndustryId === industryId) {
+    if (
+      !route ||
+      !industryEligible ||
+      !industry ||
+      industryPending ||
+      industry.currentIndustryId === industryId
+    ) {
       if (industry?.currentIndustryId === industryId) setIndustryOpen(false);
       return;
     }
+    const ownership = { ...industryOwnershipRef.current };
+    const sourceRoute = route;
+    const ownsMutation = (): boolean =>
+      isRouteCurrent(sourceRoute) && ownsFeature(industryOwnershipRef, ownership);
+    const sourceOrderId = route.recordId;
     const previousIndustry = industry;
     setIndustry({ ...industry, currentIndustryId: industryId });
     setIndustryOpen(false);
     setIndustryPending(true);
     try {
-      const change = await applyIndustryChange(gateway, industry, industryId);
+      const change = await applyIndustryChange(gateway, sourceOrderId, industry, industryId);
+      if (!ownsMutation()) return;
       const selectedName =
         industry.industries.find((candidate) => candidate.id === industryId)?.name ?? 'No industry';
       if (settings.successToasts.industry) {
         notify(
-          createMessage('success', `Industry set to ${selectedName}.`, {
+          createStatusMessage('success', `Industry set to ${selectedName}.`, {
             dismissAfterMs: 7_000,
             action: {
               label: 'Undo',
               run: async () => {
+                if (!ownsMutation()) return;
                 try {
                   const restored = await undoIndustryChange(gateway, change);
+                  if (!ownsMutation()) return;
                   if (!restored) {
                     notify(
-                      createMessage(
+                      createStatusMessage(
                         'warning',
                         'Undo was not applied because the customer changed elsewhere.',
                       ),
@@ -646,13 +735,14 @@ export function ContentApp({
                   }
                   setIndustry({ ...previousIndustry, currentIndustryId: change.before });
                   notify(
-                    createMessage('info', 'Previous industry restored.', {
+                    createStatusMessage('info', 'Previous industry restored.', {
                       dismissAfterMs: 4_000,
                     }),
                   );
                 } catch (error) {
+                  if (!ownsMutation()) return;
                   const failure = publicError(error);
-                  notify(createMessage('error', failure.message));
+                  notify(createStatusMessage('error', failure.message));
                 }
               },
             },
@@ -664,17 +754,31 @@ export function ContentApp({
         );
       }
     } catch (error) {
+      if (!ownsMutation()) return;
       setIndustry(previousIndustry);
       const failure = publicError(error);
-      notify(createMessage('error', failure.message));
+      notify(createStatusMessage('error', failure.message));
     } finally {
-      setIndustryPending(false);
+      if (ownsMutation()) setIndustryPending(false);
     }
   };
 
-  if (!route || !settings.enabled) return null;
-
   const theme = settings.appearance === 'auto' ? detectedTheme : settings.appearance;
+  if (!settings.enabled) {
+    return status ? (
+      <div className={`extension-shell theme-${theme}`} data-theme={theme}>
+        <StatusBar status={status} onDismiss={dismissStatus} />
+      </div>
+    ) : null;
+  }
+  if (!route) {
+    return (
+      <div className={`extension-shell theme-${theme}`} data-theme={theme}>
+        <StatusBar status={status} onDismiss={dismissStatus} />
+      </div>
+    );
+  }
+
   const nativeFieldStyle = anchor
     ? ({
         top: anchor.top,
@@ -695,8 +799,9 @@ export function ContentApp({
     : undefined;
   const showNativeFields =
     anchor &&
-    readyRecordId === recordId &&
-    (settings.features.industry || settings.features.health);
+    readyRouteKey === routeKey &&
+    ((settings.features.industry && industryEligible) ||
+      (settings.features.health && healthEligible));
   const nativeFields = showNativeFields
     ? createPortal(
         <div className={`extension-shell theme-${theme}`} data-theme={theme}>
@@ -705,7 +810,7 @@ export function ContentApp({
             style={nativeFieldStyle}
             aria-label="Customer data"
           >
-            {settings.features.industry ? (
+            {settings.features.industry && industryEligible ? (
               <IndustryField
                 context={industry}
                 open={industryOpen}
@@ -716,7 +821,7 @@ export function ContentApp({
                 onSelect={(industryId) => void selectIndustry(industryId)}
               />
             ) : null}
-            {settings.features.health ? (
+            {settings.features.health && healthEligible ? (
               <HealthControl
                 context={health}
                 loading={healthLoading}

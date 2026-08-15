@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { isHealthEligibleSubscription } from '../src/features/health/eligibility';
+import { isIndustryEligibleSubscription } from '../src/features/industry/eligibility';
 import {
   findContractNumberAnchor,
   findOrderDateAnchor,
+  getRenderedSubscriptionRoute,
+  getRenderedSubscriptionStatusLabel,
   hasInProgressSubscriptionBadge,
   isAllowedOdooLocation,
+  isExactSubscriptionRoute,
   isRenderedSubscriptionForm,
   parseSubscriptionRoute,
 } from '../src/odoo/routes';
@@ -54,6 +59,28 @@ describe('Odoo route eligibility', () => {
     expect(isRenderedSubscriptionForm('/odoo/subscriptions/42')).toBe(true);
   });
 
+  it('leaves In Progress eligibility to the server instead of translated badge text', () => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="partner_id"></div>
+        <div name="subscription_state"><span class="badge">En cours</span></div>
+      </div>`;
+    const route = getRenderedSubscriptionRoute(location('/odoo/subscriptions/42'));
+    expect(route).toMatchObject({ recordId: 42, pathname: '/odoo/subscriptions/42' });
+
+    document.querySelector('[name="subscription_state"]')?.remove();
+    expect(getRenderedSubscriptionRoute(location('/odoo/subscriptions/42'))).toMatchObject({
+      recordId: 42,
+    });
+  });
+
+  it('keeps an in-flight source bound to its exact record and pathname', () => {
+    const route = parseSubscriptionRoute(location('/odoo/subscriptions/42'));
+    expect(isExactSubscriptionRoute(route, 42, '/odoo/subscriptions/42')).toBe(true);
+    expect(isExactSubscriptionRoute(route, 43, '/odoo/subscriptions/42')).toBe(false);
+    expect(isExactSubscriptionRoute(route, 42, '/odoo/sale.order/42')).toBe(false);
+  });
+
   it('accepts only an exact In Progress subscription badge', () => {
     document.body.innerHTML = `
       <div class="o_form_view">
@@ -66,6 +93,50 @@ describe('Odoo route eligibility', () => {
 
     document.querySelector('.badge')!.textContent = 'Not In Progress';
     expect(hasInProgressSubscriptionBadge()).toBe(false);
+  });
+
+  it.each([
+    ['In Progress', true],
+    ['Paused', true],
+    ['Quotation Sent', false],
+    ['En cours', false],
+    ['in progress', false],
+  ])('applies the independent exact Health policy to %s', (label, expected) => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="subscription_state"><span class="badge">${label}</span></div>
+      </div>`;
+    expect(isHealthEligibleSubscription()).toBe(expected);
+  });
+
+  it.each([
+    ['In Progress', true],
+    ['Paused', true],
+    ['Quotation Sent', false],
+    ['En cours', false],
+    ['paused', false],
+  ])('applies the independent exact Industry policy to %s', (label, expected) => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="subscription_state"><span class="badge">${label}</span></div>
+      </div>`;
+    expect(isIndustryEligibleSubscription()).toBe(expected);
+  });
+
+  it('fails closed when the rendered state is absent or ambiguous', () => {
+    document.body.innerHTML = '<div class="o_form_view"></div>';
+    expect(getRenderedSubscriptionStatusLabel()).toBeNull();
+    expect(isHealthEligibleSubscription()).toBe(false);
+    expect(isIndustryEligibleSubscription()).toBe(false);
+
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="subscription_state"><span class="badge">In Progress</span></div>
+        <div name="subscription_state"><span class="badge">Paused</span></div>
+      </div>`;
+    expect(getRenderedSubscriptionStatusLabel()).toBeNull();
+    expect(isHealthEligibleSubscription()).toBe(false);
+    expect(isIndustryEligibleSubscription()).toBe(false);
   });
 
   it('finds the native Order Date field used as the visual anchor', () => {

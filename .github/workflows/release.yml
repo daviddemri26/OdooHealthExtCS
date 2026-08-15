@@ -5,9 +5,7 @@ on:
     tags: ['v*.*.*']
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 concurrency:
   group: store-release
@@ -15,6 +13,8 @@ concurrency:
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
@@ -22,67 +22,104 @@ jobs:
       chrome_ready: ${{ steps.release_state.outputs.chrome_ready }}
       firefox_ready: ${{ steps.release_state.outputs.firefox_ready }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
           run_install: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm package
-      - run: pnpm verify:release-version
-      - id: release_state
-        run: node scripts/verify-release-state.mjs release "$GITHUB_REF_NAME"
       - id: version
         run: node -p '"version=" + require("./package.json").version' >> "$GITHUB_OUTPUT"
-      - uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: artifacts/*
-      - uses: actions/upload-artifact@v7
+      - run: pnpm package
+      - run: pnpm verify:release-version
+      - env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_GIT_SHA: ${{ github.sha }}
+        run: node scripts/verify-release-assets.mjs artifacts
+      - id: release_state
+        run: node scripts/verify-release-state.mjs release "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-assets
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
+  attest:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: artifacts
+      - uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: artifacts/*
+
+  publish-github:
+    needs: [build, attest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: artifacts
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" artifacts/* --clobber
+            gh release edit "${GITHUB_REF_NAME}" \
+              --notes "" \
+              --title "OdooHealthExtCS ${GITHUB_REF_NAME}"
           else
             gh release create "${GITHUB_REF_NAME}" \
               artifacts/* \
               --verify-tag \
-              --generate-notes \
+              --notes "" \
               --title "OdooHealthExtCS ${GITHUB_REF_NAME}"
           fi
 
   chrome:
-    needs: build
+    needs: [build, publish-github]
     if: ${{ needs.build.outputs.chrome_ready == 'true' && vars.CHROME_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: chrome-store
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          version: 10.9.0
-          run_install: false
-      - uses: actions/setup-node@v6
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-assets
           path: artifacts
+      - env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_GIT_SHA: ${{ github.sha }}
+        run: node scripts/verify-release-assets.mjs artifacts
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/chromewebstore
@@ -91,45 +128,60 @@ jobs:
       - env:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
-        run: pnpm exec node scripts/publish-chrome.mjs
+        run: node scripts/publish-chrome.mjs
       - run: echo "Chrome package submitted from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
 
   firefox:
-    needs: build
+    name: Firefox — verify AMO has no duplicate or pending version before approval
+    needs: [build, publish-github]
     if: ${{ needs.build.outputs.firefox_ready == 'true' && vars.FIREFOX_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: firefox-amo
+    environment:
+      name: firefox-amo
+      url: https://addons.mozilla.org/developers/addons
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
           run_install: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-assets
           path: artifacts
-      - run: pnpm icons && pnpm build:firefox
+      - env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_GIT_SHA: ${{ github.sha }}
+        run: node scripts/verify-release-assets.mjs artifacts
+      - env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          mkdir firefox-release
+          unzip -q "artifacts/OdooHealthExtCS-v${RELEASE_VERSION}-firefox.zip" -d firefox-release
       - env:
           WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
         run: >-
           pnpm exec web-ext sign
-          --source-dir .output/firefox-mv3
+          --source-dir firefox-release
           --artifacts-dir signed
           --channel listed
-          --amo-metadata store/firefox-submission.json
+          --amo-metadata store/firefox-update.json
           --api-key "$WEB_EXT_API_KEY"
           --api-secret "$WEB_EXT_API_SECRET"
           --upload-source-code "artifacts/OdooHealthExtCS-v${{ needs.build.outputs.version }}-source.zip"
           --no-input
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: firefox-signed-${{ github.ref_name }}
           path: signed/*
@@ -140,9 +192,11 @@ jobs:
           echo "Review status: https://addons.mozilla.org/developers/addons" >> "$GITHUB_STEP_SUMMARY"
 
   stores-disabled:
-    needs: build
+    needs: [build, publish-github]
     if: ${{ needs.build.outputs.chrome_ready != 'true' || vars.CHROME_PUBLISH_ENABLED != 'true' || needs.build.outputs.firefox_ready != 'true' || vars.FIREFOX_PUBLISH_ENABLED != 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - run: |
           echo "GitHub Release completed." >> "$GITHUB_STEP_SUMMARY"

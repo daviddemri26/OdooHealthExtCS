@@ -6,21 +6,29 @@ import {
   subscribeToCompatibilityStatus,
 } from '../../src/shared/compatibility';
 import { getActiveLiveConnectionIdentity } from '../../src/shared/live-connection';
-import { DEFAULT_SETTINGS, getSettings, saveSettings } from '../../src/shared/settings';
+import {
+  DEFAULT_SETTINGS,
+  getSettings,
+  mergeSettingsPatch,
+  patchSettings,
+  subscribeToSettings,
+  type ExtensionSettingsPatch,
+} from '../../src/shared/settings';
 import type {
   AppearancePreference,
   CompatibilityStatus,
   ConnectionCode,
   ExtensionSettings,
+  RenewalYear,
 } from '../../src/shared/types';
 
-type PanelId = 'connection' | 'settings' | 'health' | 'industry';
+type PanelId = 'connection' | 'settings' | 'health' | 'industry' | 'renewals';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 interface NavigationItem {
   id: PanelId;
   label: string;
-  icon: 'connection' | 'settings' | 'health' | 'industry';
+  icon: 'connection' | 'settings' | 'health' | 'industry' | 'renewals';
 }
 
 const NAVIGATION_ITEMS: NavigationItem[] = [
@@ -44,7 +52,14 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
     label: 'Industry',
     icon: 'industry',
   },
+  {
+    id: 'renewals',
+    label: 'Renewals',
+    icon: 'renewals',
+  },
 ];
+
+const RENEWAL_DISCOUNT_SETTING_YEARS = [2, 3, 4, 5] as const satisfies readonly RenewalYear[];
 
 function PanelIcon({ icon }: { icon: NavigationItem['icon'] }): React.JSX.Element {
   if (icon === 'health') {
@@ -59,6 +74,14 @@ function PanelIcon({ icon }: { icon: NavigationItem['icon'] }): React.JSX.Elemen
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 20V9l8-5v16M12 10h8v10M7 11h1M7 15h1M15 13h2M15 17h2M2 20h20" />
+      </svg>
+    );
+  }
+
+  if (icon === 'renewals') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20 8V4h-4M20 4l-4.5 4.5A7 7 0 1 0 19 15" />
       </svg>
     );
   }
@@ -484,6 +507,134 @@ function FeaturePanel({
   );
 }
 
+function RenewalsPanel({
+  settings,
+  onEnabledChange,
+  onSuccessToastChange,
+  onDiscountChange,
+}: {
+  settings: ExtensionSettings;
+  onEnabledChange: (checked: boolean) => void;
+  onSuccessToastChange: (checked: boolean) => void;
+  onDiscountChange: (year: RenewalYear, discountTenths: number) => void;
+}): React.JSX.Element {
+  const enabled = settings.features.renewals;
+  const controlsDisabled = !settings.enabled || !enabled;
+  const discountDefaultsDisabled = !settings.enabled;
+
+  return (
+    <div className="page" data-panel="renewals">
+      <section className="feature-overview" aria-label="Renewals overview">
+        <p>
+          Create several renewal quotations without leaving the subscription. Only terms equal to or
+          longer than the current contract are offered.
+        </p>
+      </section>
+
+      {!settings.enabled ? (
+        <div className="inline-notice" role="status">
+          Enable the extension from the top-right switch to use this feature.
+        </div>
+      ) : null}
+
+      <section className="options-card" aria-label="Renewals settings">
+        <Switch
+          checked={enabled}
+          disabled={!settings.enabled}
+          label="Enable Multi-year Renewals"
+          description="Add a renewal menu beside Odoo’s native Renew button."
+          onChange={onEnabledChange}
+        />
+        <Switch
+          checked={settings.successToasts.renewals}
+          disabled={controlsDisabled}
+          label="Show success confirmation"
+          description="Display a short confirmation after quotations or links are created."
+          onChange={onSuccessToastChange}
+        />
+      </section>
+
+      <section
+        className={`renewal-defaults-card${discountDefaultsDisabled ? ' is-disabled' : ''}`}
+        aria-label="Default renewal discounts"
+      >
+        <div className="renewal-defaults-heading">
+          <h3>Default discounts</h3>
+          <p>
+            These percentages prefill 2- to 5-year renewals and can still be edited before creation.
+            The 1-year default remains 0%; at that value, it creates no discount line.
+          </p>
+        </div>
+        <div className="renewal-discount-list">
+          {RENEWAL_DISCOUNT_SETTING_YEARS.map((year) => (
+            <label key={year} className="renewal-discount-row">
+              <span>{year}-year</span>
+              <span className="renewal-discount-input">
+                <RenewalDiscountInput
+                  year={year}
+                  discountTenths={settings.renewalDefaults.discountTenthsByYears[year]}
+                  disabled={discountDefaultsDisabled}
+                  onDiscountChange={onDiscountChange}
+                />
+                <span aria-hidden="true">%</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RenewalDiscountInput({
+  year,
+  discountTenths,
+  disabled,
+  onDiscountChange,
+}: {
+  year: RenewalYear;
+  discountTenths: number;
+  disabled: boolean;
+  onDiscountChange: (year: RenewalYear, discountTenths: number) => void;
+}): React.JSX.Element {
+  const formattedValue = String(discountTenths / 10);
+  const [draft, setDraft] = useState(formattedValue);
+
+  useEffect(() => setDraft(formattedValue), [formattedValue]);
+
+  const commit = (rawValue: string): boolean => {
+    if (rawValue.trim() === '') return false;
+    const percentage = Number(rawValue);
+    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return false;
+    const rawTenths = percentage * 10;
+    if (!Number.isInteger(rawTenths)) return false;
+    const normalizedTenths = rawTenths;
+    if (normalizedTenths % 5 !== 0) return false;
+    if (normalizedTenths !== discountTenths) onDiscountChange(year, normalizedTenths);
+    return true;
+  };
+
+  return (
+    <input
+      type="number"
+      min="0"
+      max="100"
+      step="0.5"
+      inputMode="decimal"
+      aria-label={`${year}-year discount`}
+      disabled={disabled}
+      value={draft}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        commit(event.target.value);
+      }}
+      onBlur={() => {
+        if (!commit(draft)) setDraft(formattedValue);
+      }}
+    />
+  );
+}
+
 export function Popup(): React.JSX.Element {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [compatibility, setCompatibility] = useState<CompatibilityStatus | null>(null);
@@ -491,7 +642,11 @@ export function Popup(): React.JSX.Element {
   const [activePanel, setActivePanel] = useState<PanelId>('connection');
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const didHydrate = useRef(false);
+  const pendingSaveCount = useRef(0);
+  const saveSequence = useRef(0);
+  const saveBatchHadError = useRef(false);
+  const saveFeedbackTimer = useRef(0);
+  const mounted = useRef(true);
 
   useEffect(() => {
     let active = true;
@@ -512,6 +667,22 @@ export function Popup(): React.JSX.Element {
 
   useEffect(() => subscribeToCompatibilityStatus(setCompatibility), []);
 
+  useEffect(
+    () =>
+      subscribeToSettings((nextSettings) => {
+        if (pendingSaveCount.current === 0) setSettings(nextSettings);
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      window.clearTimeout(saveFeedbackTimer.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (!compatibility?.ok || compatibility.code !== 'ready') {
       setConnectedUser(null);
@@ -526,49 +697,69 @@ export function Popup(): React.JSX.Element {
     };
   }, [compatibility?.checkedAt, compatibility?.code, compatibility?.ok]);
 
-  useEffect(() => {
-    if (!ready) return;
-    if (!didHydrate.current) {
-      didHydrate.current = true;
-      return;
-    }
-
-    let feedbackTimer = 0;
-    setSaveState('saving');
-    const saveTimer = window.setTimeout(() => {
-      void saveSettings(settings)
-        .then(() => {
-          setSaveState('saved');
-          feedbackTimer = window.setTimeout(() => setSaveState('idle'), 1_400);
-        })
-        .catch(() => setSaveState('error'));
-    }, 140);
-    return () => {
-      window.clearTimeout(saveTimer);
-      window.clearTimeout(feedbackTimer);
-    };
-  }, [ready, settings]);
-
   const theme = useMemo(() => {
     if (settings.appearance !== 'auto') return settings.appearance;
     return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }, [settings.appearance]);
 
+  const settleSettingsPatch = async (failed: boolean): Promise<void> => {
+    pendingSaveCount.current = Math.max(0, pendingSaveCount.current - 1);
+    if (failed) saveBatchHadError.current = true;
+    if (pendingSaveCount.current > 0) return;
+
+    const settledSequence = saveSequence.current;
+    const batchHadError = saveBatchHadError.current;
+    try {
+      const latest = await getSettings();
+      if (
+        !mounted.current ||
+        pendingSaveCount.current > 0 ||
+        settledSequence !== saveSequence.current
+      ) {
+        return;
+      }
+      setSettings(latest);
+      if (batchHadError) {
+        setSaveState('error');
+        return;
+      }
+      setSaveState('saved');
+      saveFeedbackTimer.current = window.setTimeout(() => setSaveState('idle'), 1_400);
+    } catch {
+      if (mounted.current && pendingSaveCount.current === 0) setSaveState('error');
+    }
+  };
+
+  const commitSettingsPatch = (patch: ExtensionSettingsPatch): void => {
+    if (!ready) return;
+    if (pendingSaveCount.current === 0) saveBatchHadError.current = false;
+    saveSequence.current += 1;
+    pendingSaveCount.current += 1;
+    window.clearTimeout(saveFeedbackTimer.current);
+    setSaveState('saving');
+    setSettings((current) => mergeSettingsPatch(current, patch));
+
+    void patchSettings(patch).then(
+      () => void settleSettingsPatch(false),
+      () => void settleSettingsPatch(true),
+    );
+  };
+
   const updateFeature = (feature: keyof ExtensionSettings['features'], checked: boolean): void => {
-    setSettings((current) => ({
-      ...current,
-      features: { ...current.features, [feature]: checked },
-    }));
+    commitSettingsPatch({ features: { [feature]: checked } });
   };
 
   const updateSuccessToast = (
     feature: keyof ExtensionSettings['successToasts'],
     checked: boolean,
   ): void => {
-    setSettings((current) => ({
-      ...current,
-      successToasts: { ...current.successToasts, [feature]: checked },
-    }));
+    commitSettingsPatch({ successToasts: { [feature]: checked } });
+  };
+
+  const updateRenewalDiscount = (year: RenewalYear, discountTenths: number): void => {
+    commitSettingsPatch({
+      renewalDefaults: { discountTenthsByYears: { [year]: discountTenths } },
+    });
   };
 
   const handleNavigationKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
@@ -600,7 +791,7 @@ export function Popup(): React.JSX.Element {
     saveState === 'saving' ? '↻' : saveState === 'saved' ? '✓' : saveState === 'error' ? '!' : '';
 
   return (
-    <main className={`popup theme-${theme}`}>
+    <main className={`popup theme-${theme}`} aria-busy={!ready} inert={ready ? undefined : true}>
       <header className="app-header">
         <div className="brand">
           <img src="/icons/icon-48.png" alt="" width="46" height="46" />
@@ -629,10 +820,9 @@ export function Popup(): React.JSX.Element {
             <input
               type="checkbox"
               checked={settings.enabled}
+              disabled={!ready}
               aria-label="Enable extension"
-              onChange={(event) =>
-                setSettings((current) => ({ ...current, enabled: event.target.checked }))
-              }
+              onChange={(event) => commitSettingsPatch({ enabled: event.target.checked })}
             />
             <span className="switch" aria-hidden="true" />
           </label>
@@ -651,6 +841,7 @@ export function Popup(): React.JSX.Element {
                 key={item.id}
                 type="button"
                 data-navigation-item
+                disabled={!ready}
                 className={activePanel === item.id ? 'is-active' : ''}
                 aria-current={activePanel === item.id ? 'page' : undefined}
                 onClick={() => setActivePanel(item.id)}
@@ -680,6 +871,7 @@ export function Popup(): React.JSX.Element {
                   key={item.id}
                   type="button"
                   data-navigation-item
+                  disabled={!ready}
                   className={activePanel === item.id ? 'is-active' : ''}
                   aria-current={activePanel === item.id ? 'page' : undefined}
                   onClick={() => setActivePanel(item.id)}
@@ -713,9 +905,14 @@ export function Popup(): React.JSX.Element {
               <SettingsPanel
                 settings={settings}
                 version={version}
-                onAppearanceChange={(appearance) =>
-                  setSettings((current) => ({ ...current, appearance }))
-                }
+                onAppearanceChange={(appearance) => commitSettingsPatch({ appearance })}
+              />
+            ) : activePanel === 'renewals' ? (
+              <RenewalsPanel
+                settings={settings}
+                onEnabledChange={(checked) => updateFeature('renewals', checked)}
+                onSuccessToastChange={(checked) => updateSuccessToast('renewals', checked)}
+                onDiscountChange={updateRenewalDiscount}
               />
             ) : (
               <FeaturePanel
@@ -726,7 +923,7 @@ export function Popup(): React.JSX.Element {
                 successToast={settings.successToasts[activePanel]}
                 onEnabledChange={(checked) => updateFeature(activePanel, checked)}
                 onHealthListPreviewChange={(checked) =>
-                  setSettings((current) => ({ ...current, healthListPreview: checked }))
+                  commitSettingsPatch({ healthListPreview: checked })
                 }
                 onSuccessToastChange={(checked) => updateSuccessToast(activePanel, checked)}
               />

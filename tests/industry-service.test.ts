@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   applyIndustryChange,
   loadIndustryContext,
   undoIndustryChange,
 } from '../src/features/industry/service';
+import { OdooGatewayError } from '../src/odoo/gateway';
 import { MockGateway } from './helpers/mock-gateway';
 
 describe('industry service', () => {
@@ -16,7 +17,7 @@ describe('industry service', () => {
     await expect(loadIndustryContext(gateway, 42)).rejects.toMatchObject({
       code: 'missing_fields',
     });
-    expect(gateway.writes).toHaveLength(0);
+    expect(gateway.customerDataCalls).toHaveLength(0);
   });
 
   it('loads the exact signed subscription partner and dynamic choices', async () => {
@@ -45,7 +46,7 @@ describe('industry service', () => {
     ]);
   });
 
-  it('preserves a signed partner ID while setting and clearing industry', async () => {
+  it('preserves a signed partner ID in closed set and clear operations', async () => {
     const gateway = new MockGateway();
     const context = {
       partnerId: -81,
@@ -53,11 +54,22 @@ describe('industry service', () => {
       currentIndustryId: 3,
       industries: [],
     };
-    await applyIndustryChange(gateway, context, 5);
-    await applyIndustryChange(gateway, context, null);
-    expect(gateway.writes).toEqual([
-      { model: 'res.partner', ids: [-81], values: { industry_id: 5 } },
-      { model: 'res.partner', ids: [-81], values: { industry_id: false } },
+    gateway.reads['res.partner'] = [{ id: -81, industry_id: [3, 'Technology'] }];
+    await applyIndustryChange(gateway, 42, context, 5);
+    await applyIndustryChange(gateway, 42, context, null);
+    expect(gateway.customerDataCalls).toEqual([
+      {
+        name: 'applyIndustry',
+        sourceOrderId: 42,
+        expectedPartnerId: -81,
+        nextIndustryId: 5,
+      },
+      {
+        name: 'applyIndustry',
+        sourceOrderId: 42,
+        expectedPartnerId: -81,
+        nextIndustryId: null,
+      },
     ]);
   });
 
@@ -76,10 +88,13 @@ describe('industry service', () => {
 
   it('surfaces a failed industry write', async () => {
     const gateway = new MockGateway();
-    gateway.writeResult = false;
+    vi.spyOn(gateway, 'applyIndustry').mockRejectedValue(
+      new OdooGatewayError('server_error', 'Odoo could not complete the request.'),
+    );
     await expect(
       applyIndustryChange(
         gateway,
+        42,
         { partnerId: 81, partnerName: 'Demo Customer', currentIndustryId: null, industries: [] },
         5,
       ),
@@ -88,17 +103,25 @@ describe('industry service', () => {
 
   it('preserves a signed partner ID when safely undoing', async () => {
     const gateway = new MockGateway();
-    const change = { partnerId: -81, before: 3, applied: 5 };
-    gateway.reads['res.partner'] = [{ id: -81, industry_id: [5, 'Manufacturing'] }];
+    const change = { sourceOrderId: 42, partnerId: -81, before: 3, applied: 5 };
     await expect(undoIndustryChange(gateway, change)).resolves.toBe(true);
-    gateway.reads['res.partner'] = [{ id: -81, industry_id: [7, 'Retail'] }];
+    gateway.industryUndoResult = false;
     await expect(undoIndustryChange(gateway, change)).resolves.toBe(false);
-    expect(gateway.readCalls).toEqual([
-      { model: 'res.partner', ids: [-81], fields: ['industry_id'] },
-      { model: 'res.partner', ids: [-81], fields: ['industry_id'] },
-    ]);
-    expect(gateway.writes).toEqual([
-      { model: 'res.partner', ids: [-81], values: { industry_id: 3 } },
+    expect(gateway.customerDataCalls).toEqual([
+      {
+        name: 'undoIndustry',
+        sourceOrderId: 42,
+        expectedPartnerId: -81,
+        expectedAppliedIndustryId: 5,
+        restoreIndustryId: 3,
+      },
+      {
+        name: 'undoIndustry',
+        sourceOrderId: 42,
+        expectedPartnerId: -81,
+        expectedAppliedIndustryId: 5,
+        restoreIndustryId: 3,
+      },
     ]);
   });
 });

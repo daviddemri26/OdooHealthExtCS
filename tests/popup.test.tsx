@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
-  saveSettings: vi.fn(),
+  patchSettings: vi.fn(),
+  subscribeToSettings: vi.fn(),
   getCompatibilityStatus: vi.fn(),
   subscribeToCompatibilityStatus: vi.fn(),
   getActiveLiveConnectionIdentity: vi.fn(),
@@ -25,7 +26,8 @@ vi.mock('../src/shared/settings', async (importOriginal) => {
   return {
     ...actual,
     getSettings: mocks.getSettings,
-    saveSettings: mocks.saveSettings,
+    patchSettings: mocks.patchSettings,
+    subscribeToSettings: mocks.subscribeToSettings,
   };
 });
 
@@ -39,22 +41,51 @@ vi.mock('../src/shared/live-connection', () => ({
 }));
 
 import { Popup } from '../entrypoints/popup/Popup';
+import { mergeSettingsPatch, type ExtensionSettingsPatch } from '../src/shared/settings';
 
 const popupStyles = readFileSync(resolve('entrypoints/popup/style.css'), 'utf8');
 
 const settings = {
-  schemaVersion: 3 as const,
+  schemaVersion: 4 as const,
   enabled: true,
   healthListPreview: true,
-  features: { health: true, industry: true },
-  successToasts: { health: true, industry: true },
+  features: { health: true, industry: true, renewals: false },
+  successToasts: { health: true, industry: true, renewals: true },
+  renewalDefaults: {
+    discountTenthsByYears: { 1: 0, 2: 30, 3: 60, 4: 80, 5: 100 },
+  },
   appearance: 'dark' as const,
 };
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe('settings popup', () => {
+  let storedSettings = settings;
+  let settingsListener: ((nextSettings: typeof settings) => void) | null = null;
+
   beforeEach(() => {
-    mocks.getSettings.mockReset().mockResolvedValue(settings);
-    mocks.saveSettings.mockReset().mockResolvedValue(undefined);
+    storedSettings = structuredClone(settings);
+    settingsListener = null;
+    mocks.getSettings.mockReset().mockImplementation(() => Promise.resolve(storedSettings));
+    mocks.patchSettings.mockReset().mockImplementation((patch: ExtensionSettingsPatch) => {
+      storedSettings = mergeSettingsPatch(storedSettings, patch) as typeof settings;
+      return Promise.resolve(storedSettings);
+    });
+    mocks.subscribeToSettings.mockReset().mockImplementation((listener) => {
+      settingsListener = listener;
+      return vi.fn();
+    });
     mocks.getCompatibilityStatus
       .mockReset()
       .mockResolvedValue({ ok: true, code: 'ready', checkedAt: new Date().toISOString() });
@@ -70,6 +101,75 @@ describe('settings popup', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps every popup control inert until settings hydration completes', async () => {
+    const pendingSettings = deferred<typeof settings>();
+    mocks.getSettings.mockReturnValue(pendingSettings.promise);
+    const view = render(<Popup />);
+
+    const popup = view.container.querySelector('main')!;
+    const masterSwitch = screen.getByRole('checkbox', { name: 'Enable extension' });
+    expect(popup).toHaveAttribute('aria-busy', 'true');
+    expect(popup).toHaveAttribute('inert');
+    expect(masterSwitch).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Connection' })).toBeDisabled();
+
+    fireEvent.click(masterSwitch);
+    expect(mocks.patchSettings).not.toHaveBeenCalled();
+
+    pendingSettings.resolve(settings);
+    await waitFor(() => expect(popup).toHaveAttribute('aria-busy', 'false'));
+    expect(popup).not.toHaveAttribute('inert');
+    expect(masterSwitch).toBeEnabled();
+  });
+
+  it('reconciles settings changes received from another extension context', async () => {
+    render(<Popup />);
+    await screen.findByText('Connected and ready');
+    const listener = settingsListener;
+    expect(listener).not.toBeNull();
+
+    act(() => {
+      listener?.({
+        ...settings,
+        enabled: false,
+        features: { ...settings.features, industry: false },
+      });
+    });
+
+    expect(screen.getByRole('checkbox', { name: 'Enable extension' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: /Industry Paused/ })).toBeInTheDocument();
+  });
+
+  it('settles concurrent field patches even when their promises finish in reverse order', async () => {
+    const firstSave = deferred<typeof settings>();
+    const secondSave = deferred<typeof settings>();
+    mocks.patchSettings
+      .mockImplementationOnce(() => firstSave.promise)
+      .mockImplementationOnce(() => secondSave.promise);
+
+    render(<Popup />);
+    await screen.findByText('Connected and ready');
+    fireEvent.click(screen.getByRole('button', { name: /Account Health Enabled/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Account Health' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show health in subscription lists' }));
+
+    expect(screen.getByText('Saving…')).toBeInTheDocument();
+    storedSettings = mergeSettingsPatch(storedSettings, {
+      features: { health: false },
+      healthListPreview: false,
+    }) as typeof settings;
+    secondSave.resolve(storedSettings);
+    await act(async () => Promise.resolve());
+    expect(screen.getByText('Saving…')).toBeInTheDocument();
+
+    firstSave.resolve(storedSettings);
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Enable Account Health' })).not.toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: 'Show health in subscription lists' }),
+    ).not.toBeChecked();
+  });
+
   it('lists features directly and opens each dedicated page', async () => {
     render(<Popup />);
 
@@ -79,6 +179,7 @@ describe('settings popup', () => {
     const settingsNavigation = screen.getByRole('button', { name: 'Settings' });
     const healthNavigation = screen.getByRole('button', { name: /Account Health Enabled/ });
     const industryNavigation = screen.getByRole('button', { name: /Industry Enabled/ });
+    expect(screen.getByRole('button', { name: /Renewals Disabled/ })).toBeInTheDocument();
 
     fireEvent.click(settingsNavigation);
     expect(screen.getByRole('article', { name: 'Appearance settings' })).toBeInTheDocument();
@@ -114,6 +215,83 @@ describe('settings popup', () => {
     expect(
       screen.queryByText('Feature preferences on this page are saved automatically.'),
     ).not.toBeInTheDocument();
+  });
+
+  it('configures renewal defaults on a dedicated auto-saved feature page', async () => {
+    render(<Popup />);
+    await screen.findByText('Connected and ready');
+    fireEvent.click(screen.getByRole('button', { name: /Renewals Disabled/ }));
+
+    expect(
+      screen.getByText(/Create several renewal quotations without leaving the subscription\./),
+    ).toBeInTheDocument();
+    const enableRenewals = screen.getByRole('checkbox', {
+      name: 'Enable Multi-year Renewals',
+    });
+    const successConfirmation = screen.getByRole('checkbox', {
+      name: 'Show success confirmation',
+    });
+    expect(enableRenewals).not.toBeChecked();
+    expect(successConfirmation).toBeDisabled();
+
+    expect(screen.queryByRole('spinbutton', { name: '1-year discount' })).not.toBeInTheDocument();
+    for (const [year, percentage] of [
+      [2, 3],
+      [3, 6],
+      [4, 8],
+      [5, 10],
+    ] as const) {
+      const input = screen.getByRole('spinbutton', {
+        name: `${year}-year discount`,
+      });
+      expect(input).toBeEnabled();
+      expect(input).toHaveValue(percentage);
+      expect(input).toHaveAttribute('min', '0');
+      expect(input).toHaveAttribute('max', '100');
+      expect(input).toHaveAttribute('step', '0.5');
+    }
+
+    expect(screen.getByText(/These percentages prefill 2- to 5-year renewals/)).toBeInTheDocument();
+    expect(screen.getByText(/1-year default remains 0%/)).toBeInTheDocument();
+    expect(screen.queryByText(/Quotation links may grant access/)).not.toBeInTheDocument();
+
+    fireEvent.click(enableRenewals);
+    expect(successConfirmation).toBeEnabled();
+    const threeYearDiscount = screen.getByRole('spinbutton', {
+      name: '3-year discount',
+    });
+    fireEvent.change(threeYearDiscount, { target: { value: '6.5' } });
+    fireEvent.click(successConfirmation);
+
+    await waitFor(() =>
+      expect(mocks.patchSettings).toHaveBeenLastCalledWith({
+        successToasts: { renewals: false },
+      }),
+    );
+    expect(mocks.patchSettings).toHaveBeenCalledWith({ features: { renewals: true } });
+    expect(mocks.patchSettings).toHaveBeenCalledWith({
+      renewalDefaults: { discountTenthsByYears: { 3: 65 } },
+    });
+
+    const saveCount = mocks.patchSettings.mock.calls.length;
+    fireEvent.change(threeYearDiscount, { target: { value: '' } });
+    expect(threeYearDiscount).toHaveValue(null);
+    await Promise.resolve();
+    expect(mocks.patchSettings).toHaveBeenCalledTimes(saveCount);
+
+    fireEvent.blur(threeYearDiscount);
+    expect(threeYearDiscount).toHaveValue(6.5);
+    expect(mocks.patchSettings).toHaveBeenCalledTimes(saveCount);
+
+    fireEvent.change(threeYearDiscount, { target: { value: '7.9' } });
+    fireEvent.blur(threeYearDiscount);
+    expect(threeYearDiscount).toHaveValue(6.5);
+    expect(mocks.patchSettings).toHaveBeenCalledTimes(saveCount);
+
+    fireEvent.change(threeYearDiscount, { target: { value: '7.49' } });
+    fireEvent.blur(threeYearDiscount);
+    expect(threeYearDiscount).toHaveValue(6.5);
+    expect(mocks.patchSettings).toHaveBeenCalledTimes(saveCount);
   });
 
   it('shows the current Odoo connection without repeating privacy details', async () => {
@@ -165,10 +343,7 @@ describe('settings popup', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Account Health' }));
 
     await waitFor(() =>
-      expect(mocks.saveSettings).toHaveBeenCalledWith({
-        ...settings,
-        features: { health: false, industry: true },
-      }),
+      expect(mocks.patchSettings).toHaveBeenCalledWith({ features: { health: false } }),
     );
     expect(await screen.findByText('Saved')).toBeInTheDocument();
     expect(screen.getByText('Saved').closest('.save-state')).toHaveClass('save-state-saved');
@@ -182,11 +357,7 @@ describe('settings popup', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Show health in subscription lists' }));
 
     await waitFor(() =>
-      expect(mocks.saveSettings).toHaveBeenLastCalledWith({
-        ...settings,
-        healthListPreview: false,
-        features: { health: false, industry: true },
-      }),
+      expect(mocks.patchSettings).toHaveBeenLastCalledWith({ healthListPreview: false }),
     );
   });
 

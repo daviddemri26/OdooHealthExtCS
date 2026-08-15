@@ -2,17 +2,26 @@ export type HealthState = 'high' | 'medium' | 'low' | null;
 
 export type AppearancePreference = 'auto' | 'light' | 'dark';
 
+export type RenewalYear = 1 | 2 | 3 | 4 | 5;
+
+export type RenewalDiscountTenthsByYears = Record<RenewalYear, number>;
+
 export interface ExtensionSettings {
-  schemaVersion: 3;
+  schemaVersion: 4;
   enabled: boolean;
   healthListPreview: boolean;
   features: {
     health: boolean;
     industry: boolean;
+    renewals: boolean;
   };
   successToasts: {
     health: boolean;
     industry: boolean;
+    renewals: boolean;
+  };
+  renewalDefaults: {
+    discountTenthsByYears: RenewalDiscountTenthsByYears;
   };
   appearance: AppearancePreference;
 }
@@ -49,7 +58,6 @@ export interface FeatureModule {
 }
 
 export type OdooDomain = unknown[];
-export type OdooValues = Record<string, unknown>;
 
 export interface OdooRecord {
   id: number;
@@ -76,7 +84,6 @@ export interface OdooGateway {
     fields: string[],
     options?: { limit?: number; order?: string },
   ): Promise<T[]>;
-  write(model: string, ids: number[], values: OdooValues): Promise<boolean>;
 }
 
 export type ConnectionCode =

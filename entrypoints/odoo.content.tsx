@@ -3,11 +3,22 @@ import { browser } from 'wxt/browser';
 
 import { ContentApp } from '../src/content/ContentApp';
 import { attachPanelHost, createExtensionHost } from '../src/content/host';
+import { StatusStore } from '../src/content/status';
 import contentStyles from '../src/content/styles.css?inline';
+import { isHealthEligibleSubscription } from '../src/features/health/eligibility';
 import { SubscriptionListHealthPreview } from '../src/features/health/list-preview';
+import { isIndustryEligibleSubscription } from '../src/features/industry/eligibility';
+import { RenewalController } from '../src/features/renewals/controller';
 import {
-  hasInProgressSubscriptionBadge,
-  isRenderedSubscriptionForm,
+  attachRenewalButtonHost,
+  findNativeRenewButton,
+  type RenewalButtonHost,
+} from '../src/features/renewals/native-host';
+import { RenewalQuoteSmartButtonManager } from '../src/features/renewals/smart-button';
+import { RenewalPopover } from '../src/features/renewals/RenewalPopover';
+import {
+  getRenderedSubscriptionRoute,
+  isExactSubscriptionRoute,
   parseSubscriptionRoute,
 } from '../src/odoo/routes';
 import { OdooGatewayError, PageContextOdooGateway } from '../src/odoo/gateway';
@@ -21,6 +32,7 @@ import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from '../src/share
 import type { ConnectionCode, ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
 
 const ROOT_ID = 'odoo-health-ext-cs-root';
+const RENEWAL_BUTTON_ROOT_ID = `${ROOT_ID}-renewal-button`;
 const CONNECTION_CODES = new Set<ConnectionCode>([
   'bridge_unavailable',
   'timeout',
@@ -59,11 +71,7 @@ function detectOdooTheme(): 'light' | 'dark' {
 }
 
 function getActiveRoute(): SubscriptionRoute | null {
-  const route = parseSubscriptionRoute(window.location);
-  if (!route || !isRenderedSubscriptionForm(route.pathname) || !hasInProgressSubscriptionBadge()) {
-    return null;
-  }
-  return route;
+  return getRenderedSubscriptionRoute(window.location);
 }
 
 export default defineContentScript({
@@ -76,6 +84,19 @@ export default defineContentScript({
     );
     const gateway = new PageContextOdooGateway();
     const listHealthPreview = new SubscriptionListHealthPreview(gateway);
+    const statusStore = new StatusStore();
+    let active = true;
+    let renewalSourcePathname: string | null = null;
+    const renewalController = new RenewalController({
+      gateway,
+      statusStore,
+      isSourceActive: (sourceOrderId) => {
+        if (!active) return false;
+        const route = parseSubscriptionRoute(window.location);
+        return isExactSubscriptionRoute(route, sourceOrderId, renewalSourcePathname);
+      },
+    });
+    const renewalQuoteSmartButton = new RenewalQuoteSmartButtonManager();
 
     const root: Root = createRoot(container);
     let settings: ExtensionSettings = DEFAULT_SETTINGS;
@@ -84,7 +105,32 @@ export default defineContentScript({
     let scheduled = 0;
     let connectionCheckSequence = 0;
     let liveConnectionIdentity: LiveConnectionIdentity | null = null;
-    let active = true;
+    let renewalButtonHost: RenewalButtonHost | null = null;
+
+    const removeRenewalButtonHost = (): void => {
+      renewalButtonHost?.detach();
+      renewalButtonHost = null;
+    };
+
+    const syncRenewalButtonHost = (visible: boolean): RenewalButtonHost | null => {
+      if (!visible) {
+        removeRenewalButtonHost();
+        return null;
+      }
+
+      const sourceButton = findNativeRenewButton();
+      if (!sourceButton) {
+        removeRenewalButtonHost();
+        return null;
+      }
+      if (renewalButtonHost?.host.isConnected && renewalButtonHost.sourceButton === sourceButton) {
+        return renewalButtonHost;
+      }
+
+      removeRenewalButtonHost();
+      renewalButtonHost = attachRenewalButtonHost(RENEWAL_BUTTON_ROOT_ID, '');
+      return renewalButtonHost;
+    };
 
     const refreshConnectionStatus = async (): Promise<void> => {
       const sequence = ++connectionCheckSequence;
@@ -110,18 +156,91 @@ export default defineContentScript({
 
     const render = (): void => {
       const route = getActiveRoute();
+      const healthEligible = Boolean(route && isHealthEligibleSubscription());
+      const industryEligible = Boolean(route && isIndustryEligibleSubscription());
+      const customerDataRoute = route && (healthEligible || industryEligible) ? route : null;
+      const configuredRenewals = Boolean(
+        route && settingsReady && settings.enabled && settings.features.renewals,
+      );
+      const currentRenewal = renewalController.getSnapshot();
+      const renewalRunInFlight =
+        currentRenewal.phase === 'preflight' || currentRenewal.phase === 'running';
+      const renewalSessionRetained =
+        currentRenewal.sourceOrderId !== null &&
+        (renewalRunInFlight ||
+          currentRenewal.draftFrozen ||
+          currentRenewal.phase === 'success' ||
+          currentRenewal.phase === 'partial' ||
+          currentRenewal.phase === 'unknown');
+      const renewalContextMatches = Boolean(
+        route &&
+        currentRenewal.sourceOrderId === route.recordId &&
+        renewalSourcePathname === route.pathname,
+      );
+
+      if (configuredRenewals && route) {
+        if (!renewalRunInFlight || renewalContextMatches) {
+          if (!renewalContextMatches) {
+            renewalController.clear();
+            renewalSourcePathname = route.pathname;
+          }
+          renewalController.configure({
+            sourceOrderId: route.recordId,
+            discountTenthsByYears: settings.renewalDefaults.discountTenthsByYears,
+            showSuccessConfirmation: settings.successToasts.renewals,
+          });
+        }
+      } else if (!renewalRunInFlight && (!renewalSessionRetained || !renewalContextMatches)) {
+        renewalController.clear();
+        renewalSourcePathname = null;
+      }
+
+      const renewalSnapshot = renewalController.getSnapshot();
+      const renewalBelongsToRoute = Boolean(
+        route &&
+        renewalSnapshot.sourceOrderId === route.recordId &&
+        renewalSourcePathname === route.pathname,
+      );
+      const renewalHost = syncRenewalButtonHost(
+        configuredRenewals && renewalBelongsToRoute && renewalSnapshot.eligibility === 'eligible',
+      );
+      renewalQuoteSmartButton.sync({
+        enabled: renewalBelongsToRoute && (configuredRenewals || renewalRunInFlight),
+        sourceOrderId: renewalBelongsToRoute ? renewalSnapshot.sourceOrderId : null,
+        visibleRenewalQuoteCount: renewalSnapshot.visibleRenewalQuoteCount,
+      });
       void listHealthPreview.sync(settingsReady && settings.enabled && settings.healthListPreview);
-      if (route) attachPanelHost(panelHost);
+      if (customerDataRoute) attachPanelHost(panelHost);
       else panelHost.style.display = 'none';
       root.render(
-        <ContentApp
-          gateway={gateway}
-          route={route}
-          settings={settings}
-          detectedTheme={detectOdooTheme()}
-          anchor={route ? measureOrderDateAnchor() : null}
-          panelContainer={panelContainer}
-        />,
+        <>
+          <ContentApp
+            gateway={gateway}
+            route={customerDataRoute}
+            isRouteCurrent={(candidate) =>
+              isExactSubscriptionRoute(
+                parseSubscriptionRoute(window.location),
+                candidate.recordId,
+                candidate.pathname,
+              )
+            }
+            healthEligible={healthEligible}
+            industryEligible={industryEligible}
+            settings={settings}
+            detectedTheme={detectOdooTheme()}
+            anchor={customerDataRoute ? measureOrderDateAnchor() : null}
+            panelContainer={panelContainer}
+            statusStore={statusStore}
+          />
+          {renewalHost && renewalBelongsToRoute ? (
+            <RenewalPopover
+              controller={renewalController}
+              caretContainer={renewalHost.container}
+              theme={settings.appearance === 'auto' ? detectOdooTheme() : settings.appearance}
+              routeKey={`${route?.recordId ?? 'none'}:${route?.pathname ?? ''}`}
+            />
+          ) : null}
+        </>,
       );
     };
 
@@ -171,6 +290,7 @@ export default defineContentScript({
       settingsReady = true;
       renderNow();
     });
+    const unsubscribeRenewals = renewalController.subscribe(scheduleRender);
 
     const handleRuntimeMessage: Parameters<typeof browser.runtime.onMessage.addListener>[0] = (
       message,
@@ -219,11 +339,14 @@ export default defineContentScript({
       active = false;
       connectionCheckSequence += 1;
       listHealthPreview.destroy();
+      renewalController.dispose();
+      renewalQuoteSmartButton.detach();
       gateway.dispose();
       observer.disconnect();
       window.clearInterval(routeInterval);
       window.clearTimeout(scheduled);
       unsubscribe();
+      unsubscribeRenewals();
       browser.runtime.onMessage.removeListener(handleRuntimeMessage);
       window.removeEventListener('popstate', handleSpaNavigation);
       window.removeEventListener('hashchange', handleSpaNavigation);
@@ -231,6 +354,7 @@ export default defineContentScript({
       window.removeEventListener('online', handleOnline);
       colorScheme.removeEventListener('change', scheduleRender);
       root.unmount();
+      removeRenewalButtonHost();
       panelHost.remove();
       host.remove();
     });

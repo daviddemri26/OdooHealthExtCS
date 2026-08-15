@@ -1,6 +1,7 @@
 import type { HealthState, OdooGateway, OdooRecord } from '../../shared/types';
 import { OdooGatewayError } from '../../odoo/gateway';
 import { MAX_SUBSCRIPTION_LIST_BATCH } from '../../odoo/bridge-protocol';
+import type { CustomerDataGateway } from '../../odoo/customer-data-contracts';
 
 export const HEALTH_TAG_NAMES: Record<Exclude<HealthState, null>, string> = {
   high: 'Health - High',
@@ -194,29 +195,23 @@ export async function loadSubscriptionListHealth(
 }
 
 export async function applyHealthChange(
-  gateway: OdooGateway,
+  gateway: CustomerDataGateway,
   orderId: number,
-  tags: HealthTagMap,
-  currentIds: number[],
   next: HealthState,
 ): Promise<AppliedHealthChange> {
-  const applied = prepareHealthTagIds(currentIds, tags, next);
-  const success = await gateway.write('sale.order', [orderId], {
-    tag_ids: [[6, 0, applied]],
-  });
-  if (!success) throw new OdooGatewayError('server_error', 'Odoo did not save the health change.');
-  return { before: [...currentIds], applied, state: next };
+  const result = await gateway.applyHealthState(orderId, next);
+  return {
+    before: [...result.beforeHealthTagIds],
+    applied: [...result.appliedHealthTagIds],
+    state: result.state,
+  };
 }
 
 export async function undoHealthChange(
-  gateway: OdooGateway,
+  gateway: CustomerDataGateway,
   orderId: number,
   change: AppliedHealthChange,
 ): Promise<boolean> {
-  const records = await gateway.read<SaleOrderRecord>('sale.order', [orderId], ['tag_ids']);
-  const current = records[0]?.tag_ids;
-  if (!Array.isArray(current) || !sameIdSet(current, change.applied)) return false;
-  return gateway.write('sale.order', [orderId], {
-    tag_ids: [[6, 0, change.before]],
-  });
+  const result = await gateway.undoHealthState(orderId, change.applied, change.before);
+  return result.restored;
 }

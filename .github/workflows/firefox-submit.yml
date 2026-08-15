@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  attestations: read
 
 concurrency:
   group: firefox-amo-${{ inputs.release_tag }}
@@ -17,21 +18,27 @@ concurrency:
 
 jobs:
   submit:
+    name: Firefox recovery — verify AMO has no duplicate or pending version before approval
     if: ${{ vars.FIREFOX_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: firefox-amo
+    environment:
+      name: firefox-amo
+      url: https://addons.mozilla.org/developers/addons
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.release_tag }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.9.0
           run_install: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - id: release
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -39,16 +46,32 @@ jobs:
           pnpm exec node scripts/verify-release-state.mjs release "$RELEASE_TAG"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "git_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: gh release download "$RELEASE_TAG" --dir artifacts
       - env:
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_GIT_SHA: ${{ steps.release.outputs.git_sha }}
+          RELEASE_SIGNER_WORKFLOW: github.com/${{ github.repository }}/.github/workflows/release.yml
+          RELEASE_SOURCE_REF: refs/tags/${{ steps.release.outputs.tag }}
         run: |
-          cd artifacts
-          sha256sum --check checksums.sha256
-          node -e 'const fs=require("node:fs"); const manifest=JSON.parse(fs.readFileSync("release-manifest.json","utf8")); if (manifest.version !== process.env.RELEASE_VERSION) throw new Error(`Release manifest version ${manifest.version} does not match ${process.env.RELEASE_VERSION}.`);'
+          for artifact in artifacts/*; do
+            test -f "$artifact"
+            gh attestation verify "$artifact" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$RELEASE_SIGNER_WORKFLOW" \
+              --signer-digest "$RELEASE_GIT_SHA" \
+              --source-digest "$RELEASE_GIT_SHA" \
+              --source-ref "$RELEASE_SOURCE_REF" \
+              --predicate-type "https://slsa.dev/provenance/v1" \
+              --deny-self-hosted-runners
+          done
+      - env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_GIT_SHA: ${{ steps.release.outputs.git_sha }}
+        run: node scripts/verify-release-assets.mjs artifacts
       - env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
@@ -64,12 +87,12 @@ jobs:
             --source-dir firefox-release \
             --artifacts-dir signed \
             --channel listed \
-            --amo-metadata store/firefox-submission.json \
+            --amo-metadata store/firefox-update.json \
             --api-key "$WEB_EXT_API_KEY" \
             --api-secret "$WEB_EXT_API_SECRET" \
             --upload-source-code "artifacts/OdooHealthExtCS-v${{ steps.release.outputs.version }}-source.zip" \
             --no-input
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: firefox-signed-${{ steps.release.outputs.tag }}
           path: signed/*

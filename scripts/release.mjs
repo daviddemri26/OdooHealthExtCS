@@ -2,6 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import {
+  assertRemoteReleaseTagAbsent,
+  incrementVersion,
+  pushAtomicRelease,
+} from './release-git.mjs';
+
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const releaseArguments = process.argv.slice(2).filter((argument) => argument !== '--');
 const [releaseMode] = releaseArguments;
@@ -31,9 +37,17 @@ const head = run('git', ['rev-parse', 'HEAD'], { capture: true });
 const originHead = run('git', ['rev-parse', 'origin/main'], { capture: true });
 if (head !== originHead) throw new Error('Local main must match origin/main before release.');
 
+const packagePath = path.join(projectRoot, 'package.json');
+const currentPackageJson = JSON.parse(await readFile(packagePath, 'utf8'));
+const expectedVersion = incrementVersion(currentPackageJson.version, releaseMode);
+const expectedTag = `v${expectedVersion}`;
+if (run('git', ['tag', '--list', expectedTag], { capture: true })) {
+  throw new Error(`Tag ${expectedTag} already exists locally.`);
+}
+assertRemoteReleaseTagAbsent(run, expectedTag);
+
 run('pnpm', ['validate']);
 
-const packagePath = path.join(projectRoot, 'package.json');
 const changelogPath = path.join(projectRoot, 'CHANGELOG.md');
 const pendingChangelog = await readFile(changelogPath, 'utf8');
 const unreleasedMatch = pendingChangelog.match(
@@ -45,6 +59,11 @@ if (!unreleasedMatch?.[1].trim()) {
 
 run('pnpm', ['version', releaseMode, '--no-git-tag-version']);
 const incrementedPackageJson = JSON.parse(await readFile(packagePath, 'utf8'));
+if (incrementedPackageJson.version !== expectedVersion) {
+  throw new Error(
+    `pnpm selected ${incrementedPackageJson.version}, expected release version ${expectedVersion}.`,
+  );
+}
 const date = new Date().toISOString().slice(0, 10);
 const updatedChangelog = pendingChangelog.replace(
   unreleasedMatch[0],
@@ -59,15 +78,16 @@ const changelog = await readFile(changelogPath, 'utf8');
 if (!changelog.includes(`## [${version}]`)) {
   throw new Error(`CHANGELOG.md must contain a ${version} release section.`);
 }
-if (run('git', ['tag', '--list', `v${version}`], { capture: true })) {
-  throw new Error(`Tag v${version} already exists.`);
-}
-
 run('pnpm', ['package']);
 run('git', ['add', 'package.json', 'pnpm-lock.yaml', 'CHANGELOG.md']);
-run('git', ['commit', '-m', `chore(release): v${version}`]);
-run('git', ['tag', '-a', `v${version}`, '-m', `OdooHealthExtCS v${version}`]);
-run('git', ['push', 'origin', 'main']);
-run('git', ['push', 'origin', `v${version}`]);
+run('git', [
+  'commit',
+  '-m',
+  `chore(release): v${version}`,
+  '-m',
+  `Promote the validated Unreleased changes to ${version}, synchronize package metadata, and prepare the immutable release tag.`,
+]);
+run('git', ['tag', '-a', expectedTag, '-m', `OdooHealthExtCS ${expectedTag}`]);
+pushAtomicRelease(run, { tag: expectedTag });
 
 process.stdout.write(`Released OdooHealthExtCS v${version}.\n`);
