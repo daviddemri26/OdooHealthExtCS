@@ -104,6 +104,7 @@ test('release recovery reuses only the original attested tag artifacts', async (
   const build = jobBlock(release, 'build');
   const chrome = jobBlock(release, 'chrome');
   const firefox = jobBlock(release, 'firefox');
+  const storesDisabled = jobBlock(release, 'stores-disabled');
 
   assert.match(release, /workflow_dispatch:/);
   assert.match(release, /release_tag:/);
@@ -128,6 +129,19 @@ test('release recovery reuses only the original attested tag artifacts', async (
   assert.match(build, /RELEASE_GIT_SHA: \$\{\{ steps\.identity\.outputs\.git_sha \}\}/);
   assert.match(chrome, /RELEASE_GIT_SHA: \$\{\{ needs\.build\.outputs\.git_sha \}\}/);
   assert.match(firefox, /RELEASE_GIT_SHA: \$\{\{ needs\.build\.outputs\.git_sha \}\}/);
+  for (const storeJob of [chrome, firefox, storesDisabled]) {
+    assert.match(storeJob, /if: \$\{\{ always\(\)/);
+    assert.match(storeJob, /needs\.build\.result == 'success'/);
+    assert.match(storeJob, /needs\.publish-github\.result == 'success'/);
+  }
+  assert.match(chrome, /needs\.build\.outputs\.chrome_ready == 'true'/);
+  assert.match(chrome, /vars\.CHROME_PUBLISH_ENABLED == 'true'/);
+  assert.match(firefox, /needs\.build\.outputs\.firefox_ready == 'true'/);
+  assert.match(firefox, /vars\.FIREFOX_PUBLISH_ENABLED == 'true'/);
+  assert.match(storesDisabled, /needs\.build\.outputs\.chrome_ready != 'true'/);
+  assert.match(storesDisabled, /vars\.CHROME_PUBLISH_ENABLED != 'true'/);
+  assert.match(storesDisabled, /needs\.build\.outputs\.firefox_ready != 'true'/);
+  assert.match(storesDisabled, /vars\.FIREFOX_PUBLISH_ENABLED != 'true'/);
   assert.match(release, /if: \$\{\{ github\.event_name == 'push' \}\}[\s\S]*?pnpm package/);
   assert.match(release, /needs\.attest\.result == 'skipped'/);
   assert.doesNotMatch(release, /\$\{\{ github\.sha \}\}|\$GITHUB_REF_NAME/);
