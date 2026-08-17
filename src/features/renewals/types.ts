@@ -37,13 +37,25 @@ export interface RenewalSelection {
 
 export type RenewalQuoteKey = 'native-renewal' | 'annual-normalization' | `year-${RenewalYears}`;
 
-export interface RenewalCopyStep {
-  kind: 'copy-plan';
-  sourceQuoteKey: 'native-renewal' | 'annual-normalization';
-  quoteKey: RenewalQuoteKey;
-  years: RenewalYears;
-  purpose: 'annual-normalization' | 'target';
+export type RenewalQuoteRetention = 'selected' | 'intermediate';
+
+export interface RenewalNativeRenewalStep {
+  readonly kind: 'native-renewal';
+  readonly quoteKey: 'native-renewal';
+  readonly durationMonths: number;
+  readonly retention: RenewalQuoteRetention;
 }
+
+export interface RenewalCopyStep {
+  readonly kind: 'copy-plan';
+  readonly sourceQuoteKey: 'native-renewal' | 'annual-normalization';
+  readonly quoteKey: RenewalQuoteKey;
+  readonly years: RenewalYears;
+  readonly purpose: 'annual-normalization' | 'target';
+  readonly retention: RenewalQuoteRetention;
+}
+
+export type RenewalCreationStep = RenewalNativeRenewalStep | RenewalCopyStep;
 
 export interface RenewalTargetPlan extends RenewalSelection {
   quoteKey: RenewalQuoteKey;
@@ -56,10 +68,13 @@ export interface RenewalCreationPlan {
   selectedYears: readonly RenewalYears[];
   baseQuoteKey: 'native-renewal' | 'annual-normalization';
   baseDurationMonths: number;
+  nativeRenewal: RenewalNativeRenewalStep;
   normalizationCopy: RenewalCopyStep | null;
   targetCopies: readonly RenewalCopyStep[];
   copySteps: readonly RenewalCopyStep[];
+  creationSteps: readonly RenewalCreationStep[];
   targets: readonly RenewalTargetPlan[];
+  technicalQuoteKeys: readonly RenewalQuoteKey[];
   totalQuoteCount: number;
   technicalQuoteCount: number;
 }

@@ -6,6 +6,7 @@ import {
   type NormalizedBillingPeriod,
   type RenewalCopyStep,
   type RenewalCreationPlan,
+  type RenewalNativeRenewalStep,
   type RenewalPlanFailure,
   type RenewalPlanResult,
   type RenewalQuoteKey,
@@ -143,6 +144,7 @@ function createTargetCopy(
     quoteKey: targetQuoteKey(years),
     years,
     purpose: 'target',
+    retention: 'selected',
   };
 }
 
@@ -168,6 +170,9 @@ export function buildRenewalPlan(
         quoteKey: 'annual-normalization',
         years: 1,
         purpose: 'annual-normalization',
+        retention: normalizedSelections.some(({ years }) => years === 1)
+          ? 'selected'
+          : 'intermediate',
       }
     : null;
 
@@ -193,7 +198,18 @@ export function buildRenewalPlan(
   });
 
   const copySteps = normalizationCopy ? [normalizationCopy, ...targetCopies] : targetCopies;
-  const totalQuoteCount = 1 + copySteps.length;
+  const nativeRenewal: RenewalNativeRenewalStep = {
+    kind: 'native-renewal',
+    quoteKey: 'native-renewal',
+    durationMonths: currentMonths,
+    retention: targets.some(({ quoteKey }) => quoteKey === 'native-renewal')
+      ? 'selected'
+      : 'intermediate',
+  };
+  const creationSteps = [nativeRenewal, ...copySteps];
+  const technicalQuoteKeys = creationSteps
+    .filter(({ retention }) => retention === 'intermediate')
+    .map(({ quoteKey }) => quoteKey);
 
   const plan: RenewalCreationPlan = {
     currentMonths,
@@ -201,12 +217,15 @@ export function buildRenewalPlan(
     selectedYears: targets.map(({ years }) => years),
     baseQuoteKey,
     baseDurationMonths,
+    nativeRenewal,
     normalizationCopy,
     targetCopies,
     copySteps,
+    creationSteps,
     targets,
-    totalQuoteCount,
-    technicalQuoteCount: totalQuoteCount - targets.length,
+    technicalQuoteKeys,
+    totalQuoteCount: creationSteps.length,
+    technicalQuoteCount: technicalQuoteKeys.length,
   };
 
   return { ok: true, plan };

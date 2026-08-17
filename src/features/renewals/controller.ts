@@ -35,6 +35,14 @@ export interface RenewalDraftTarget {
   result?: RenewalQuoteResult;
 }
 
+export type RenewalCleanupPhase = 'idle' | 'running' | 'complete' | 'failed' | 'unknown';
+
+export interface RenewalCleanupState {
+  phase: RenewalCleanupPhase;
+  completed: number;
+  total: number;
+}
+
 export interface RenewalControllerSnapshot {
   sourceOrderId: number | null;
   eligibility: RenewalEligibility;
@@ -47,6 +55,7 @@ export interface RenewalControllerSnapshot {
   results: readonly RenewalQuoteResult[];
   draftFrozen: boolean;
   visibleRenewalQuoteCount: number | null;
+  cleanup: RenewalCleanupState;
 }
 
 export interface RenewalControllerContext {
@@ -84,6 +93,7 @@ const INITIAL_SNAPSHOT: RenewalControllerSnapshot = {
   results: [],
   draftFrozen: false,
   visibleRenewalQuoteCount: null,
+  cleanup: { phase: 'idle', completed: 0, total: 0 },
 };
 
 const AMOUNT_EPSILON = 1e-6;
@@ -165,6 +175,24 @@ function assertKnownCreationOutcome(result: RenewalCreatedQuoteResult): void {
   }
   if (result.reconciledAfterTimeout) {
     throw new OdooGatewayError('timeout', 'The Odoo request timed out.');
+  }
+}
+
+function assertIntermediateCancellationResult(
+  result: { cancelledQuoteIds: number[]; alreadyCancelledQuoteIds: number[] },
+  expectedCount: number,
+): void {
+  const allQuoteIds = [...result.cancelledQuoteIds, ...result.alreadyCancelledQuoteIds];
+  if (
+    !Array.isArray(result.cancelledQuoteIds) ||
+    !Array.isArray(result.alreadyCancelledQuoteIds) ||
+    allQuoteIds.some((quoteId) => !isPositiveSafeInteger(quoteId)) ||
+    new Set(allQuoteIds).size !== allQuoteIds.length ||
+    allQuoteIds.length !== expectedCount
+  ) {
+    throw new RenewalControllerError(
+      'Odoo did not confirm the cleanup of every intermediate renewal quotation.',
+    );
   }
 }
 
@@ -548,6 +576,7 @@ export class RenewalController {
       errorMessage: undefined,
       results: [],
       draftFrozen: false,
+      cleanup: { phase: 'idle', completed: 0, total: 0 },
     };
     this.replaceTargetsFromDefaults();
   }
@@ -589,6 +618,7 @@ export class RenewalController {
         quoteId: undefined,
         result: undefined,
       })),
+      cleanup: { phase: 'idle', completed: 0, total: 0 },
     };
     this.emit();
     this.notifyProgress(0, selectedDrafts.length);
@@ -597,8 +627,6 @@ export class RenewalController {
     const createdQuoteIds = new Map<RenewalQuoteKey, number>();
     const createdQuoteParents = new Map<RenewalQuoteKey, number>();
     const targetQuoteIds = new Map<RenewalYears, number>();
-    const countedQuoteIds = new Set<number>();
-    let serverRenewalQuoteCount = this.snapshot.visibleRenewalQuoteCount ?? 0;
     let plannedTargets: readonly { years: RenewalYears; quoteKey: RenewalQuoteKey }[] = [];
 
     try {
@@ -610,7 +638,6 @@ export class RenewalController {
         );
       }
       const freshEligible = assertPreflight(freshPreflight, sourceOrderId);
-      serverRenewalQuoteCount = freshPreflight.renewalQuoteCount;
       const selections = selectedDrafts.map(({ years, discountTenths }) => ({
         years,
         discountTenths,
@@ -642,7 +669,9 @@ export class RenewalController {
         preflight: freshPreflight,
         allowedYears: freshEligible,
         phase: 'running',
-        visibleRenewalQuoteCount: serverRenewalQuoteCount,
+        visibleRenewalQuoteCount:
+          Math.max(this.snapshot.visibleRenewalQuoteCount ?? 0, freshPreflight.renewalQuoteCount) +
+          selectedDrafts.length,
       };
       this.emit();
 
@@ -653,36 +682,30 @@ export class RenewalController {
         sourceFingerprint(freshPreflight),
         requiredCopyYears,
         requiresDiscount,
+        planResult.plan.nativeRenewal.retention,
       );
       if (!isPositiveSafeInteger(nativeRenewal.quoteId)) {
         throw new RenewalControllerError('Odoo did not return a valid native renewal quotation.');
       }
       createdQuoteIds.set('native-renewal', nativeRenewal.quoteId);
       createdQuoteParents.set('native-renewal', sourceOrderId);
-      this.registerKnownCreatedQuote(
-        sourceOrderId,
-        nativeRenewal.quoteId,
-        serverRenewalQuoteCount,
-        countedQuoteIds,
-      );
       assertKnownCreationOutcome(nativeRenewal);
 
       if (planResult.plan.normalizationCopy) {
         const sourceQuoteId = createdQuoteIds.get(planResult.plan.normalizationCopy.sourceQuoteKey);
         if (!sourceQuoteId) throw new RenewalControllerError('The annual renewal base is missing.');
         this.assertSourceActive(sourceOrderId);
-        const annual = await this.gateway.copyNativePlan(sourceQuoteId, 1, runId);
+        const annual = await this.gateway.copyNativePlan(
+          sourceQuoteId,
+          1,
+          runId,
+          planResult.plan.normalizationCopy.retention,
+        );
         if (!isPositiveSafeInteger(annual.quoteId)) {
           throw new RenewalControllerError('Odoo did not return a valid annual renewal quotation.');
         }
         createdQuoteIds.set('annual-normalization', annual.quoteId);
         createdQuoteParents.set('annual-normalization', sourceQuoteId);
-        this.registerKnownCreatedQuote(
-          sourceOrderId,
-          annual.quoteId,
-          serverRenewalQuoteCount,
-          countedQuoteIds,
-        );
         assertKnownCreationOutcome(annual);
       }
 
@@ -726,7 +749,12 @@ export class RenewalController {
           throw new RenewalControllerError('The renewal base quotation is missing.');
         this.setTargetPhase(copy.years, 'creating');
         this.assertSourceActive(sourceOrderId);
-        const created = await this.gateway.copyNativePlan(sourceQuoteId, copy.years, runId);
+        const created = await this.gateway.copyNativePlan(
+          sourceQuoteId,
+          copy.years,
+          runId,
+          copy.retention,
+        );
         if (!isPositiveSafeInteger(created.quoteId)) {
           throw new RenewalControllerError(
             `Odoo did not return a valid ${copy.years}-year renewal quotation.`,
@@ -734,12 +762,6 @@ export class RenewalController {
         }
         createdQuoteIds.set(copy.quoteKey, created.quoteId);
         createdQuoteParents.set(copy.quoteKey, sourceQuoteId);
-        this.registerKnownCreatedQuote(
-          sourceOrderId,
-          created.quoteId,
-          serverRenewalQuoteCount,
-          countedQuoteIds,
-        );
         assertKnownCreationOutcome(created);
       }
 
@@ -820,6 +842,7 @@ export class RenewalController {
         this.setTargetPhase(target.years, 'generating-link');
         this.assertSourceActive(sourceOrderId);
         const share = await this.gateway.getNativeShareLink(verified.quoteId, runId);
+        this.assertSourceActive(sourceOrderId);
         if (share.quoteId !== verified.quoteId || !share.shareLink) {
           throw new RenewalControllerError(
             `Odoo did not return the ${target.years}-year renewal link.`,
@@ -838,7 +861,57 @@ export class RenewalController {
         this.notifyProgress(this.snapshot.completedCount, selectedDrafts.length);
       }
 
-      this.update({ phase: 'success' });
+      this.assertSourceActive(sourceOrderId);
+      if (planResult.plan.technicalQuoteCount > 0) {
+        const cleanupTotal = planResult.plan.technicalQuoteCount;
+        this.update({
+          cleanup: { phase: 'running', completed: 0, total: cleanupTotal },
+        });
+        this.notifyCleanupProgress();
+        try {
+          this.assertSourceActive(sourceOrderId);
+          const cleanup = await this.gateway.cancelIntermediateRenewalQuotes(runId);
+          this.assertSourceActive(sourceOrderId);
+          assertIntermediateCancellationResult(cleanup, cleanupTotal);
+        } catch (error) {
+          const unknownCleanup = isUnknownOutcome(error);
+          if (!this.isCurrentSource(sourceOrderId)) {
+            if (this.snapshot.sourceOrderId === sourceOrderId) {
+              this.update({
+                phase: unknownCleanup ? 'unknown' : 'partial',
+                cleanup: {
+                  phase: unknownCleanup ? 'unknown' : 'failed',
+                  completed: 0,
+                  total: cleanupTotal,
+                },
+                errorMessage: publicErrorMessage(error),
+              });
+            }
+            this.dismissProgress();
+            return;
+          }
+          const cleanupMessage = unknownCleanup
+            ? `Renewal quotations created, but cleanup could not be confirmed for ${cleanupTotal} intermediate ${cleanupTotal === 1 ? 'quotation' : 'quotations'}.`
+            : `Renewal quotations created, but ${cleanupTotal} intermediate ${cleanupTotal === 1 ? 'quotation could' : 'quotations could'} not be canceled.`;
+          this.update({
+            phase: 'partial',
+            cleanup: {
+              phase: unknownCleanup ? 'unknown' : 'failed',
+              completed: 0,
+              total: cleanupTotal,
+            },
+            errorMessage: publicErrorMessage(error),
+          });
+          this.notifyPersistent('warning', cleanupMessage, publicErrorMessage(error));
+          return;
+        }
+        this.update({
+          phase: 'success',
+          cleanup: { phase: 'complete', completed: cleanupTotal, total: cleanupTotal },
+        });
+      } else {
+        this.update({ phase: 'success' });
+      }
       if (this.showSuccessConfirmation) {
         this.notify(
           createStatusMessage(
@@ -861,6 +934,13 @@ export class RenewalController {
         }
       }
       await this.reconcileCreatedTargets(runId, targetQuoteIds);
+      if (!this.isCurrentSource(sourceOrderId)) {
+        if (this.snapshot.sourceOrderId === sourceOrderId) {
+          this.update({ phase: unknownOutcome ? 'unknown' : 'partial', errorMessage: message });
+        }
+        this.dismissProgress();
+        return;
+      }
       this.finalizeUnresolvedSelectedTargets(unknownOutcome);
       const hasResults = this.snapshot.results.length > 0;
       const phase: RenewalRunPhase = unknownOutcome ? 'unknown' : 'partial';
@@ -1112,11 +1192,15 @@ export class RenewalController {
   }
 
   private assertSourceActive(sourceOrderId: number): void {
-    if (!this.isSourceActive(sourceOrderId)) {
+    if (!this.isCurrentSource(sourceOrderId)) {
       throw new RenewalControllerError(
         'The source subscription changed. The renewal run was stopped.',
       );
     }
+  }
+
+  private isCurrentSource(sourceOrderId: number): boolean {
+    return this.snapshot.sourceOrderId === sourceOrderId && this.isSourceActive(sourceOrderId);
   }
 
   private async reconcileCreatedTargets(
@@ -1177,23 +1261,6 @@ export class RenewalController {
     this.emit();
   }
 
-  private registerKnownCreatedQuote(
-    sourceOrderId: number,
-    quoteId: number,
-    serverRenewalQuoteCount: number,
-    countedQuoteIds: Set<number>,
-  ): void {
-    if (
-      this.snapshot.sourceOrderId !== sourceOrderId ||
-      countedQuoteIds.has(quoteId) ||
-      !isPositiveSafeInteger(quoteId)
-    ) {
-      return;
-    }
-    countedQuoteIds.add(quoteId);
-    this.update({ visibleRenewalQuoteCount: serverRenewalQuoteCount + countedQuoteIds.size });
-  }
-
   private update(patch: Partial<RenewalControllerSnapshot>): void {
     this.snapshot = { ...this.snapshot, ...patch };
     this.emit();
@@ -1209,6 +1276,19 @@ export class RenewalController {
       id: existing ?? randomRunId(),
       kind: 'info',
       message: `Creating renewal quotations (${completed} of ${total})…`,
+      detail: 'Keep this Odoo tab open.',
+      dismissAfterMs: 0,
+    };
+    this.progressStatusId = status.id;
+    this.notify(status);
+  }
+
+  private notifyCleanupProgress(): void {
+    const existing = this.progressStatusId;
+    const status: StatusMessage = {
+      id: existing ?? randomRunId(),
+      kind: 'info',
+      message: 'Canceling intermediate quotations…',
       detail: 'Keep this Odoo tab open.',
       dismissAfterMs: 0,
     };

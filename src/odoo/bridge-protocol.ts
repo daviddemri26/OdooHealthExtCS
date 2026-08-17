@@ -10,6 +10,7 @@ import type {
   RenewalCreatedQuoteResult,
   RenewalDiscountApplyResult,
   RenewalDiscountClearResult,
+  RenewalIntermediateCancellationResult,
   RenewalPreflightResponse,
   RenewalQuoteLineSummary,
   RenewalQuoteSummary,
@@ -583,6 +584,43 @@ export function parseRenewalDiscountApplyResult(value: unknown): RenewalDiscount
   return { createdLineCount: Number(value.createdLineCount) };
 }
 
+export function parseRenewalIntermediateCancellationResult(
+  value: unknown,
+): RenewalIntermediateCancellationResult | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['cancelledQuoteIds', 'alreadyCancelledQuoteIds']) ||
+    !Array.isArray(value.cancelledQuoteIds) ||
+    !Array.isArray(value.alreadyCancelledQuoteIds) ||
+    value.cancelledQuoteIds.length > 8 ||
+    value.alreadyCancelledQuoteIds.length > 8 ||
+    !value.cancelledQuoteIds.every(isPositiveId) ||
+    !value.alreadyCancelledQuoteIds.every(isPositiveId)
+  ) {
+    return null;
+  }
+  const cancelledQuoteIds = value.cancelledQuoteIds as number[];
+  const alreadyCancelledQuoteIds = value.alreadyCancelledQuoteIds as number[];
+  const allQuoteIds = [...cancelledQuoteIds, ...alreadyCancelledQuoteIds];
+  if (
+    new Set(cancelledQuoteIds).size !== cancelledQuoteIds.length ||
+    new Set(alreadyCancelledQuoteIds).size !== alreadyCancelledQuoteIds.length ||
+    new Set(allQuoteIds).size !== allQuoteIds.length ||
+    cancelledQuoteIds.some(
+      (quoteId, index) => index > 0 && cancelledQuoteIds[index - 1]! >= quoteId,
+    ) ||
+    alreadyCancelledQuoteIds.some(
+      (quoteId, index) => index > 0 && alreadyCancelledQuoteIds[index - 1]! >= quoteId,
+    )
+  ) {
+    return null;
+  }
+  return {
+    cancelledQuoteIds: [...cancelledQuoteIds],
+    alreadyCancelledQuoteIds: [...alreadyCancelledQuoteIds],
+  };
+}
+
 function parseRenewalShareLink(value: unknown, expectedQuoteId: number): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2_048) return null;
   let url: URL;
@@ -793,20 +831,23 @@ export function isRenewalBridgeOperation(value: unknown): value is RenewalBridge
         'expected',
         'requiredCopyYears',
         'requiresDiscount',
+        'retention',
       ]) &&
       isPositiveId(value.sourceOrderId) &&
       isRenewalRunId(value.runId) &&
       isSourceFingerprint(value.expected) &&
       isRenewalTargetYearList(value.requiredCopyYears) &&
-      typeof value.requiresDiscount === 'boolean'
+      typeof value.requiresDiscount === 'boolean' &&
+      (value.retention === 'selected' || value.retention === 'intermediate')
     );
   }
   if (value.name === 'copyNativePlan') {
     return (
-      hasExactKeys(value, ['name', 'sourceQuoteId', 'years', 'runId']) &&
+      hasExactKeys(value, ['name', 'sourceQuoteId', 'years', 'runId', 'retention']) &&
       isPositiveId(value.sourceQuoteId) &&
       isRenewalTargetYears(value.years) &&
-      isRenewalRunId(value.runId)
+      isRenewalRunId(value.runId) &&
+      (value.retention === 'selected' || value.retention === 'intermediate')
     );
   }
   if (value.name === 'clearNativeMultiYearDiscount') {
@@ -834,6 +875,9 @@ export function isRenewalBridgeOperation(value: unknown): value is RenewalBridge
     );
   }
   if (value.name === 'finishRenewalRun') {
+    return hasExactKeys(value, ['name', 'runId']) && isRenewalRunId(value.runId);
+  }
+  if (value.name === 'cancelIntermediateRenewalQuotes') {
     return hasExactKeys(value, ['name', 'runId']) && isRenewalRunId(value.runId);
   }
   return false;

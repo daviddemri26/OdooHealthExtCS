@@ -17,6 +17,7 @@ import {
   parseRenewalCreatedQuoteResult,
   parseRenewalDiscountApplyResult,
   parseRenewalDiscountClearResult,
+  parseRenewalIntermediateCancellationResult,
   parseRenewalPreflightResult,
   parseRenewalQuoteSummary,
   parseRenewalShareLinkResult,
@@ -38,7 +39,9 @@ import type {
   RenewalDiscountApplyResult,
   RenewalDiscountClearResult,
   RenewalGateway,
+  RenewalIntermediateCancellationResult,
   RenewalPreflightResponse,
+  RenewalQuoteRetention,
   RenewalQuoteSummary,
   RenewalShareLinkResult,
   RenewalSourceFingerprint,
@@ -202,6 +205,7 @@ export class PageContextOdooGateway
     expected: RenewalSourceFingerprint,
     requiredCopyYears: RenewalTargetYears[],
     requiresDiscount: boolean,
+    retention: RenewalQuoteRetention,
   ): Promise<RenewalCreatedQuoteResult> {
     const result = await this.renewal({
       name: 'createNativeRenewal',
@@ -210,6 +214,7 @@ export class PageContextOdooGateway
       expected,
       requiredCopyYears,
       requiresDiscount,
+      retention,
     });
     const parsed = parseRenewalCreatedQuoteResult(result, sourceOrderId);
     if (!parsed) throw this.incompatibleResponse();
@@ -220,12 +225,14 @@ export class PageContextOdooGateway
     sourceQuoteId: number,
     years: RenewalTargetYears,
     runId: string,
+    retention: RenewalQuoteRetention,
   ): Promise<RenewalCreatedQuoteResult> {
     const result = await this.renewal({
       name: 'copyNativePlan',
       sourceQuoteId,
       years,
       runId,
+      retention,
     });
     const parsed = parseRenewalCreatedQuoteResult(result, sourceQuoteId);
     if (!parsed) throw this.incompatibleResponse();
@@ -280,6 +287,15 @@ export class PageContextOdooGateway
       runId,
     });
     const parsed = parseRenewalQuoteSummary(result, quoteId);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async cancelIntermediateRenewalQuotes(
+    runId: string,
+  ): Promise<RenewalIntermediateCancellationResult> {
+    const result = await this.renewal({ name: 'cancelIntermediateRenewalQuotes', runId });
+    const parsed = parseRenewalIntermediateCancellationResult(result);
     if (!parsed) throw this.incompatibleResponse();
     return parsed;
   }

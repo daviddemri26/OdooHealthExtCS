@@ -95,6 +95,7 @@ describe('renewal creation planner', () => {
         quoteKey: 'annual-normalization',
         years: 1,
         purpose: 'annual-normalization',
+        retention: 'selected',
       },
       {
         kind: 'copy-plan',
@@ -102,6 +103,7 @@ describe('renewal creation planner', () => {
         quoteKey: 'year-5',
         years: 5,
         purpose: 'target',
+        retention: 'selected',
       },
     ]);
     expect(result.plan.targets).toMatchObject([
@@ -110,6 +112,7 @@ describe('renewal creation planner', () => {
     ]);
     expect(result.plan.totalQuoteCount).toBe(3);
     expect(result.plan.technicalQuoteCount).toBe(1);
+    expect(result.plan.technicalQuoteKeys).toEqual(['native-renewal']);
   });
 
   it('uses a yearly native renewal directly as the common base', () => {
@@ -167,6 +170,7 @@ describe('renewal creation planner', () => {
     expect(result.plan.copySteps.map(({ years }) => years)).toEqual([2, 5]);
     expect(result.plan.totalQuoteCount).toBe(3);
     expect(result.plan.technicalQuoteCount).toBe(1);
+    expect(result.plan.technicalQuoteKeys).toEqual(['native-renewal']);
   });
 
   it('counts unselected native and annual-normalization quotes as technical', () => {
@@ -177,7 +181,98 @@ describe('renewal creation planner', () => {
 
     expect(result.plan.totalQuoteCount).toBe(3);
     expect(result.plan.technicalQuoteCount).toBe(2);
+    expect(result.plan.technicalQuoteKeys).toEqual(['native-renewal', 'annual-normalization']);
   });
+
+  it.each([
+    {
+      scenario: 'monthly to 2 years',
+      currentMonths: 1,
+      selections: [{ years: 2, discountTenths: 30 }],
+      creationSteps: [
+        ['native-renewal', 'intermediate'],
+        ['annual-normalization', 'intermediate'],
+        ['year-2', 'selected'],
+      ],
+      technicalQuoteKeys: ['native-renewal', 'annual-normalization'],
+    },
+    {
+      scenario: 'monthly to 1 and 5 years',
+      currentMonths: 1,
+      selections: [
+        { years: 1, discountTenths: 0 },
+        { years: 5, discountTenths: 100 },
+      ],
+      creationSteps: [
+        ['native-renewal', 'intermediate'],
+        ['annual-normalization', 'selected'],
+        ['year-5', 'selected'],
+      ],
+      technicalQuoteKeys: ['native-renewal'],
+    },
+    {
+      scenario: 'yearly to 2 years',
+      currentMonths: 12,
+      selections: [{ years: 2, discountTenths: 30 }],
+      creationSteps: [
+        ['native-renewal', 'intermediate'],
+        ['year-2', 'selected'],
+      ],
+      technicalQuoteKeys: ['native-renewal'],
+    },
+    {
+      scenario: 'yearly to 1 and 5 years',
+      currentMonths: 12,
+      selections: [
+        { years: 1, discountTenths: 0 },
+        { years: 5, discountTenths: 100 },
+      ],
+      creationSteps: [
+        ['native-renewal', 'selected'],
+        ['year-5', 'selected'],
+      ],
+      technicalQuoteKeys: [],
+    },
+    {
+      scenario: '3 years to 5 years',
+      currentMonths: 36,
+      selections: [{ years: 5, discountTenths: 100 }],
+      creationSteps: [
+        ['native-renewal', 'intermediate'],
+        ['year-5', 'selected'],
+      ],
+      technicalQuoteKeys: ['native-renewal'],
+    },
+    {
+      scenario: '13 months to 2 and 5 years',
+      currentMonths: 13,
+      selections: [
+        { years: 2, discountTenths: 30 },
+        { years: 5, discountTenths: 100 },
+      ],
+      creationSteps: [
+        ['native-renewal', 'intermediate'],
+        ['year-2', 'selected'],
+        ['year-5', 'selected'],
+      ],
+      technicalQuoteKeys: ['native-renewal'],
+    },
+  ])(
+    'classifies every quote creation for $scenario',
+    ({ currentMonths, selections, creationSteps, technicalQuoteKeys }) => {
+      const result = buildRenewalPlan(currentMonths, selections);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(
+        result.plan.creationSteps.map(({ quoteKey, retention }) => [quoteKey, retention]),
+      ).toEqual(creationSteps);
+      expect(result.plan.technicalQuoteKeys).toEqual(technicalQuoteKeys);
+      expect(result.plan.technicalQuoteCount).toBe(technicalQuoteKeys.length);
+      expect(result.plan.totalQuoteCount).toBe(creationSteps.length);
+    },
+  );
 
   it.each([
     [0, [{ years: 1, discountTenths: 0 }], 'invalid-current-duration'],

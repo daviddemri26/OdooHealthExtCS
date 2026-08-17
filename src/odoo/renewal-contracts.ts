@@ -1,4 +1,5 @@
 export type RenewalTargetYears = 1 | 2 | 3 | 4 | 5;
+export type RenewalQuoteRetention = 'selected' | 'intermediate';
 
 export const RENEWAL_RUNTIME_TIMEOUT_MS = 45_000;
 export const RENEWAL_RECONCILIATION_DELAY_MS = 1_500;
@@ -46,6 +47,11 @@ export interface RenewalDiscountClearResult {
 
 export interface RenewalDiscountApplyResult {
   createdLineCount: number;
+}
+
+export interface RenewalIntermediateCancellationResult {
+  cancelledQuoteIds: number[];
+  alreadyCancelledQuoteIds: number[];
 }
 
 export interface RenewalShareLinkResult {
@@ -98,12 +104,14 @@ export type RenewalBridgeOperation =
       expected: RenewalSourceFingerprint;
       requiredCopyYears: RenewalTargetYears[];
       requiresDiscount: boolean;
+      retention: RenewalQuoteRetention;
     }
   | {
       name: 'copyNativePlan';
       sourceQuoteId: number;
       years: RenewalTargetYears;
       runId: string;
+      retention: RenewalQuoteRetention;
     }
   | {
       name: 'clearNativeMultiYearDiscount';
@@ -127,6 +135,10 @@ export type RenewalBridgeOperation =
       runId: string;
     }
   | {
+      name: 'cancelIntermediateRenewalQuotes';
+      runId: string;
+    }
+  | {
       name: 'finishRenewalRun';
       runId: string;
     };
@@ -139,11 +151,13 @@ export interface RenewalGateway {
     expected: RenewalSourceFingerprint,
     requiredCopyYears: RenewalTargetYears[],
     requiresDiscount: boolean,
+    retention: RenewalQuoteRetention,
   ): Promise<RenewalCreatedQuoteResult>;
   copyNativePlan(
     sourceQuoteId: number,
     years: RenewalTargetYears,
     runId: string,
+    retention: RenewalQuoteRetention,
   ): Promise<RenewalCreatedQuoteResult>;
   clearNativeMultiYearDiscount(quoteId: number, runId: string): Promise<RenewalDiscountClearResult>;
   applyNativeGlobalDiscount(
@@ -153,5 +167,6 @@ export interface RenewalGateway {
   ): Promise<RenewalDiscountApplyResult>;
   getNativeShareLink(quoteId: number, runId: string): Promise<RenewalShareLinkResult>;
   readRenewalQuoteSummary(quoteId: number, runId: string): Promise<RenewalQuoteSummary>;
+  cancelIntermediateRenewalQuotes(runId: string): Promise<RenewalIntermediateCancellationResult>;
   finishRenewalRun(runId: string): Promise<void>;
 }

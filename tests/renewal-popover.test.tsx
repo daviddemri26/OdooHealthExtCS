@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StatusStore } from '../src/content/status';
-import { RenewalController } from '../src/features/renewals/controller';
+import {
+  RenewalController,
+  type RenewalControllerSnapshot,
+} from '../src/features/renewals/controller';
 import { RenewalPopover } from '../src/features/renewals/RenewalPopover';
 import type {
   RenewalGateway,
@@ -108,6 +111,11 @@ class PopoverGateway implements RenewalGateway {
     return { ...this.summary, lines: this.summary.lines.map((line) => ({ ...line })) };
   }
 
+  async cancelIntermediateRenewalQuotes() {
+    this.calls.push('cancel-intermediate');
+    return { cancelledQuoteIds: [], alreadyCancelledQuoteIds: [] };
+  }
+
   async finishRenewalRun(runId: string): Promise<void> {
     this.calls.push(`finish:${runId}`);
   }
@@ -175,6 +183,46 @@ function renderPopover(options: { delayNativeRenewal?: boolean; theme?: 'light' 
     />,
   );
   return { ...view, controller, gateway, clipboard, caretContainer };
+}
+
+function renderCleanupSnapshot(initialSnapshot: RenewalControllerSnapshot) {
+  let snapshot = initialSnapshot;
+  const listeners = new Set<() => void>();
+  const controller = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    freezeDraft: vi.fn(),
+    resetDraft: vi.fn(),
+    setSelected: vi.fn(),
+    setDiscountTenths: vi.fn(),
+    start: vi.fn(),
+    copyResultLink: vi.fn(),
+    openResult: vi.fn(),
+    copyAllLinks: vi.fn(),
+    openAllResults: vi.fn(),
+  } as unknown as RenewalController;
+  const caretContainer = document.createElement('span');
+  document.body.append(caretContainer);
+  const view = render(
+    <RenewalPopover
+      controller={controller}
+      caretContainer={caretContainer}
+      theme="dark"
+      routeKey="/odoo/subscriptions/42"
+    />,
+  );
+
+  return {
+    ...view,
+    controller,
+    setSnapshot(nextSnapshot: RenewalControllerSnapshot): void {
+      snapshot = nextSnapshot;
+      for (const listener of listeners) listener();
+    },
+  };
 }
 
 afterEach(() => {
@@ -457,5 +505,59 @@ describe('RenewalPopover', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'idle', results: [] });
     expect(screen.queryByRole('button', { name: 'Copy all links' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: '1 year' })).not.toBeChecked();
+  });
+
+  it('keeps cleanup feedback in the footer across close and reopen before revealing actions', async () => {
+    const source = renderPopover();
+    await waitFor(() => expect(source.controller.getSnapshot().eligibility).toBe('eligible'));
+    source.controller.freezeDraft();
+    source.controller.setSelected(1, true);
+    await source.controller.start();
+    const completedSnapshot = source.controller.getSnapshot();
+    source.unmount();
+    document.body.replaceChildren();
+
+    const runningSnapshot: RenewalControllerSnapshot = {
+      ...completedSnapshot,
+      phase: 'running',
+      cleanup: { phase: 'running', completed: 0, total: 1 },
+    };
+    const cleanupView = renderCleanupSnapshot(runningSnapshot);
+    const caret = screen.getByRole('button', {
+      name: 'Create multi-year renewal quotations',
+    });
+    fireEvent.click(caret);
+
+    expect(screen.getByRole('button', { name: 'Finishing…' })).toBeDisabled();
+    expect(screen.getByText('Cleaning up…')).toBeInTheDocument();
+    expect(
+      screen.getByRole('status', {
+        name: 'Canceling intermediate quotations (0 of 1)',
+      }),
+    ).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.getByRole('button', { name: 'Copy link for 1 year' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Copy all links' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open all quotes' })).not.toBeInTheDocument();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('dialog', { name: 'Multi-year renewals' })).not.toBeInTheDocument();
+    fireEvent.click(caret);
+    expect(screen.getByText('Cleaning up…')).toBeInTheDocument();
+
+    cleanupView.setSnapshot({
+      ...runningSnapshot,
+      phase: 'success',
+      cleanup: { phase: 'complete', completed: 1, total: 1 },
+    });
+
+    await waitFor(() => expect(screen.queryByText('Cleaning up…')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Copy all links' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open all quotes' })).toBeInTheDocument();
+    const styles = [...document.querySelectorAll('style')]
+      .map((style) => style.textContent ?? '')
+      .join('\n');
+    expect(styles).toContain('width: 112px');
+    expect(styles).toContain('.renewal-cleanup-status');
+    expect(styles).toContain('prefers-reduced-motion: reduce');
   });
 });

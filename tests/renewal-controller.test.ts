@@ -7,6 +7,7 @@ import { OdooGatewayError } from '../src/odoo/gateway';
 import type {
   RenewalGateway,
   RenewalPreflightResult,
+  RenewalQuoteRetention,
   RenewalQuoteSummary,
   RenewalSourceFingerprint,
   RenewalTargetYears,
@@ -35,9 +36,12 @@ class FakeRenewalGateway implements RenewalGateway {
   readonly calls: string[] = [];
   readonly nativeRenewalRequiresDiscount: boolean[] = [];
   readonly nativeRenewalRequiredCopyYears: RenewalTargetYears[][] = [];
+  readonly cancelledQuoteIds: number[] = [];
   currentPreflight = preflightForMonths(12);
   failPreflight = false;
   failFinish = false;
+  failCancel = false;
+  timeoutCancel = false;
   failApplyYears: number | null = null;
   timeoutApplyYears: number | null = null;
   failCopyYears: number | null = null;
@@ -53,6 +57,10 @@ class FakeRenewalGateway implements RenewalGateway {
   private nextQuoteId = 100;
   private lastCopiedQuoteId: number | null = null;
   private readonly summaries = new Map<number, RenewalQuoteSummary>();
+  private readonly quoteRetentions = new Map<
+    number,
+    { runId: string; retention: RenewalQuoteRetention }
+  >();
 
   async preflightRenewal(sourceOrderId: number): Promise<RenewalPreflightResult> {
     this.calls.push(`preflight:${sourceOrderId}`);
@@ -64,10 +72,11 @@ class FakeRenewalGateway implements RenewalGateway {
 
   async createNativeRenewal(
     sourceOrderId: number,
-    _runId: string,
+    runId: string,
     _expected: RenewalSourceFingerprint,
     requiredCopyYears: RenewalTargetYears[],
     requiresDiscount: boolean,
+    retention: RenewalQuoteRetention,
   ): Promise<{ quoteId: number; reconciledAfterTimeout?: true }> {
     this.calls.push(`renew:${sourceOrderId}`);
     this.nativeRenewalRequiredCopyYears.push([...requiredCopyYears]);
@@ -75,8 +84,10 @@ class FakeRenewalGateway implements RenewalGateway {
     if (this.timeoutNativeRenewal) {
       throw new OdooGatewayError('timeout', 'The Odoo request timed out.');
     }
+    const quote = this.createQuote(this.currentPreflight.currentContractMonths, sourceOrderId);
+    this.quoteRetentions.set(quote.quoteId, { runId, retention });
     return {
-      ...this.createQuote(this.currentPreflight.currentContractMonths, sourceOrderId),
+      ...quote,
       ...(this.reconciledNativeRenewal ? { reconciledAfterTimeout: true as const } : {}),
       ...(this.validationFailedNativeRenewal
         ? { reconciledAfterValidationFailure: true as const }
@@ -84,7 +95,12 @@ class FakeRenewalGateway implements RenewalGateway {
     };
   }
 
-  async copyNativePlan(sourceQuoteId: number, years: 1 | 2 | 3 | 4 | 5) {
+  async copyNativePlan(
+    sourceQuoteId: number,
+    years: 1 | 2 | 3 | 4 | 5,
+    runId: string,
+    retention: RenewalQuoteRetention,
+  ) {
     this.calls.push(`copy:${sourceQuoteId}:${years}`);
     if (this.failCopyYears === years) {
       this.copyFailureTriggered = true;
@@ -95,6 +111,7 @@ class FakeRenewalGateway implements RenewalGateway {
     }
     const quote = this.createQuote(years * 12, sourceQuoteId);
     this.lastCopiedQuoteId = quote.quoteId;
+    this.quoteRetentions.set(quote.quoteId, { runId, retention });
     return {
       ...quote,
       ...(this.validationFailedCopyYears === years
@@ -167,6 +184,24 @@ class FakeRenewalGateway implements RenewalGateway {
       throw new OdooGatewayError('network', 'The browser could not reach Odoo.');
     }
     return { ...this.getSummary(quoteId) };
+  }
+
+  async cancelIntermediateRenewalQuotes(runId: string) {
+    this.calls.push(`cancel:${runId}`);
+    if (this.timeoutCancel) {
+      throw new OdooGatewayError('timeout', 'The Odoo request timed out.');
+    }
+    if (this.failCancel) {
+      throw new OdooGatewayError('server_error', 'Odoo could not cancel the quotations.');
+    }
+    const cancelledQuoteIds = [...this.quoteRetentions.entries()]
+      .filter(([, owned]) => owned.runId === runId && owned.retention === 'intermediate')
+      .map(([quoteId]) => quoteId);
+    this.cancelledQuoteIds.push(...cancelledQuoteIds);
+    return {
+      cancelledQuoteIds,
+      alreadyCancelledQuoteIds: [],
+    };
   }
 
   async finishRenewalRun(runId: string): Promise<void> {
@@ -375,6 +410,159 @@ describe('RenewalController', () => {
     expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
   });
 
+  it('cancels only the monthly and annual intermediate quotations after a successful 2-year run', async () => {
+    const gateway = new FakeRenewalGateway();
+    gateway.currentPreflight = preflightForMonths(1, 8);
+    const { controller } = await readyController(gateway);
+    controller.freezeDraft();
+    controller.setSelected(2, true);
+
+    await controller.start();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'success',
+      cleanup: { phase: 'complete', completed: 2, total: 2 },
+      visibleRenewalQuoteCount: 9,
+    });
+    expect(controller.getSnapshot().results).toEqual([
+      expect.objectContaining({ years: 2, quoteId: 102 }),
+    ]);
+    expect(gateway.cancelledQuoteIds).toEqual([100, 101]);
+    expect(gateway.calls.indexOf('share:102')).toBeLessThan(
+      gateway.calls.indexOf('cancel:renewal-test-run'),
+    );
+    expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
+  });
+
+  it('protects selected annual and five-year quotations and cancels only the monthly base', async () => {
+    const gateway = new FakeRenewalGateway();
+    gateway.currentPreflight = preflightForMonths(1, 0);
+    const { controller } = await readyController(gateway);
+    controller.freezeDraft();
+    controller.setSelected(1, true);
+    controller.setSelected(5, true);
+
+    await controller.start();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'success',
+      cleanup: { phase: 'complete', completed: 1, total: 1 },
+    });
+    expect(gateway.cancelledQuoteIds).toEqual([100]);
+    expect(controller.getSnapshot().results.map(({ quoteId }) => quoteId)).toEqual([101, 102]);
+  });
+
+  it('skips cleanup when every created quotation is a selected target', async () => {
+    const gateway = new FakeRenewalGateway();
+    const { controller } = await readyController(gateway);
+    controller.freezeDraft();
+    controller.setSelected(1, true);
+    controller.setSelected(5, true);
+
+    await controller.start();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'success',
+      cleanup: { phase: 'idle', completed: 0, total: 0 },
+    });
+    expect(gateway.calls.some((call) => call.startsWith('cancel:'))).toBe(false);
+  });
+
+  it('keeps final links and reports a partial warning when intermediate cleanup fails', async () => {
+    const gateway = new FakeRenewalGateway();
+    gateway.failCancel = true;
+    const { controller, statusStore } = await readyController(gateway);
+    controller.freezeDraft();
+    controller.setSelected(2, true);
+
+    await controller.start();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'partial',
+      cleanup: { phase: 'failed', completed: 0, total: 1 },
+    });
+    expect(controller.getSnapshot().results).toEqual([
+      expect.objectContaining({ years: 2, quoteId: 101 }),
+    ]);
+    expect(statusStore.getSnapshot()).toMatchObject({
+      kind: 'warning',
+      message: 'Renewal quotations created, but 1 intermediate quotation could not be canceled.',
+    });
+    expect(gateway.calls.filter((call) => call === 'cancel:renewal-test-run')).toHaveLength(1);
+    expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
+  });
+
+  it('does not retry cleanup when cancellation times out', async () => {
+    const gateway = new FakeRenewalGateway();
+    gateway.timeoutCancel = true;
+    const { controller } = await readyController(gateway);
+    controller.freezeDraft();
+    controller.setSelected(2, true);
+
+    await controller.start();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'partial',
+      cleanup: { phase: 'unknown', completed: 0, total: 1 },
+      results: [expect.objectContaining({ years: 2, quoteId: 101 })],
+    });
+    expect(gateway.calls.filter((call) => call === 'cancel:renewal-test-run')).toHaveLength(1);
+  });
+
+  it('does not publish an old cleanup outcome after navigation during cancellation', async () => {
+    const gateway = new FakeRenewalGateway();
+    const statusStore = new StatusStore();
+    let sourceActive = true;
+    let releaseCancellation: (() => void) | undefined;
+    const cancellationGate = new Promise<void>((resolve) => {
+      releaseCancellation = resolve;
+    });
+    const cancelIntermediateRenewalQuotes = gateway.cancelIntermediateRenewalQuotes.bind(gateway);
+    vi.spyOn(gateway, 'cancelIntermediateRenewalQuotes').mockImplementation(async (runId) => {
+      await cancellationGate;
+      return cancelIntermediateRenewalQuotes(runId);
+    });
+    const controller = new RenewalController({
+      gateway,
+      statusStore,
+      isSourceActive: () => sourceActive,
+      createRunId: () => 'renewal-test-run',
+    });
+    controller.configure({
+      sourceOrderId: 42,
+      discountTenthsByYears: { ...DEFAULT_DISCOUNTS },
+      showSuccessConfirmation: true,
+    });
+    await vi.waitFor(() => expect(controller.getSnapshot().eligibility).toBe('eligible'));
+    controller.freezeDraft();
+    controller.setSelected(2, true);
+
+    const run = controller.start();
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().cleanup).toEqual({
+        phase: 'running',
+        completed: 0,
+        total: 1,
+      }),
+    );
+    expect(statusStore.getSnapshot()).toMatchObject({
+      kind: 'info',
+      message: 'Canceling intermediate quotations…',
+    });
+
+    sourceActive = false;
+    releaseCancellation?.();
+    await run;
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'partial',
+      cleanup: { phase: 'failed', completed: 0, total: 1 },
+    });
+    expect(statusStore.getSnapshot()).toBeNull();
+    expect(gateway.calls.filter((call) => call === 'cancel:renewal-test-run')).toHaveLength(1);
+    expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
+  });
+
   it('keeps completed volatile results if best-effort run cleanup loses the page bridge', async () => {
     const gateway = new FakeRenewalGateway();
     gateway.failFinish = true;
@@ -390,7 +578,7 @@ describe('RenewalController', () => {
     expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
   });
 
-  it('counts the monthly native renewal, annual base, and five-year copy exactly once', async () => {
+  it('increments the smart count once by the number of selected durations', async () => {
     const gateway = new FakeRenewalGateway();
     gateway.currentPreflight = preflightForMonths(1, 0);
     const { controller } = await readyController(gateway);
@@ -402,7 +590,7 @@ describe('RenewalController', () => {
 
     expect(controller.getSnapshot()).toMatchObject({
       phase: 'success',
-      visibleRenewalQuoteCount: 3,
+      visibleRenewalQuoteCount: 2,
     });
     expect(controller.getSnapshot().results.map(({ years }) => years)).toEqual([1, 5]);
     expect(gateway.calls).toContain('renew:42');
@@ -427,7 +615,7 @@ describe('RenewalController', () => {
     });
   });
 
-  it('does not increment when a creation timeout yields no quote ID', async () => {
+  it('keeps the selected-duration smart count increment after a creation timeout', async () => {
     const gateway = new FakeRenewalGateway();
     gateway.timeoutNativeRenewal = true;
     const { controller } = await readyController(gateway);
@@ -438,7 +626,7 @@ describe('RenewalController', () => {
 
     expect(controller.getSnapshot()).toMatchObject({
       phase: 'unknown',
-      visibleRenewalQuoteCount: 4,
+      visibleRenewalQuoteCount: 5,
     });
     expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
   });
@@ -568,6 +756,24 @@ describe('RenewalController', () => {
     expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
   });
 
+  it('does not cancel intermediates after a partial creation run', async () => {
+    const gateway = new FakeRenewalGateway();
+    gateway.currentPreflight = preflightForMonths(1);
+    gateway.failApplyYears = 2;
+    const { controller } = await readyController(gateway);
+    controller.freezeDraft();
+    controller.setSelected(2, true);
+
+    await controller.start();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'partial',
+      cleanup: { phase: 'idle', completed: 0, total: 0 },
+    });
+    expect(gateway.calls.some((call) => call.startsWith('cancel:'))).toBe(false);
+    expect(gateway.calls.at(-1)).toBe('finish:renewal-test-run');
+  });
+
   it('reconciles targets created before a later copy fails', async () => {
     const gateway = new FakeRenewalGateway();
     gateway.failCopyYears = 3;
@@ -595,7 +801,7 @@ describe('RenewalController', () => {
     ).toBe(true);
     expect(gateway.calls).toContain('summary:100');
     expect(gateway.calls).toContain('summary:101');
-    expect(controller.getSnapshot().visibleRenewalQuoteCount).toBe(6);
+    expect(controller.getSnapshot().visibleRenewalQuoteCount).toBe(7);
   });
 
   it('keeps created targets unknown when read-only reconciliation itself fails', async () => {

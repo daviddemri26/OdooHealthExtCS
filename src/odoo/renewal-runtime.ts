@@ -8,6 +8,7 @@ import type {
   RenewalBillingUnit,
   RenewalBridgeOperation,
   RenewalPreflightResponse,
+  RenewalQuoteRetention,
   RenewalQuoteLineSummary,
   RenewalQuoteSummary,
   RenewalTargetYears,
@@ -72,7 +73,10 @@ export interface RenewalOwnedQuoteFingerprint {
   commercialLines: RenewalCommercialLineSnapshot[];
 }
 
-type OwnedQuote = RenewalOwnedQuoteFingerprint;
+type OwnedQuote = RenewalOwnedQuoteFingerprint & {
+  readonly retention: RenewalQuoteRetention;
+  cancelled: boolean;
+};
 
 const SOURCE_ORDER_FIELDS = [
   'state',
@@ -110,6 +114,8 @@ const ORDER_OWNERSHIP_FIELDS = [
   'plan_id',
   'sale_order_template_id',
   'order_line',
+  'locked',
+  'invoice_ids',
 ] as const;
 const SOURCE_COMMERCIAL_FIELDS = [
   'partner_id',
@@ -135,6 +141,7 @@ const QUOTE_LINE_FIELDS = [
   'extra_tax_data',
   'write_date',
 ] as const;
+const INVOICE_STATE_FIELDS = ['state'] as const;
 const FIELD_DEFINITION_ATTRIBUTES = ['type', 'relation'] as const;
 const DISCOUNT_WIZARD_FIELDS = [
   'sale_order_id',
@@ -505,6 +512,7 @@ interface PendingQuoteCreation {
   existingLinkedQuoteIds: Set<number>;
   responseReceived: boolean;
   returnedQuoteId: number | null;
+  retention: RenewalQuoteRetention;
 }
 
 function sanitizeCommercialIdentity(record: Record<string, unknown>): CommercialIdentity {
@@ -548,6 +556,8 @@ async function assertOwnershipFieldDefinitions(rpc: RenewalRpcContext): Promise<
     plan_id: { type: 'many2one', relation: 'sale.subscription.plan' },
     sale_order_template_id: { type: 'many2one', relation: 'sale.order.template' },
     order_line: { type: 'one2many', relation: 'sale.order.line' },
+    locked: { type: 'boolean' },
+    invoice_ids: { type: 'many2many', relation: 'account.move' },
   });
   await assertFieldDefinitions(rpc, 'sale.order.line', {
     order_id: { type: 'many2one', relation: 'sale.order' },
@@ -884,7 +894,15 @@ async function readLinkedRenewalQuoteIds(
   return ids;
 }
 
-async function readVerifiedOwnedQuote(
+interface OwnedQuoteRead {
+  fingerprint: RenewalOwnedQuoteFingerprint;
+  state: string;
+  subscriptionState: string | null;
+  locked: boolean;
+  invoiceIds: number[];
+}
+
+async function readOwnedQuote(
   rpc: RenewalRpcContext,
   quoteId: number,
   rootSourceOrderId: number,
@@ -895,17 +913,22 @@ async function readVerifiedOwnedQuote(
   expectedTemplateClass: RenewalTemplateClass,
   expectedTemplateId: number | null,
   currencyRounding: number,
-): Promise<RenewalOwnedQuoteFingerprint> {
+): Promise<OwnedQuoteRead> {
   const record = await readOne(rpc, 'sale.order', quoteId, ORDER_OWNERSHIP_FIELDS);
   const subscription = sanitizeMany2One(record.subscription_id);
   const origin = sanitizeMany2One(record.origin_order_id);
   const plan = sanitizeMany2One(record.plan_id);
   const template = sanitizeMany2One(record.sale_order_template_id);
   const commercialIdentity = sanitizeCommercialIdentity(record);
+  const state = sanitizeLabel(record.state, 40);
+  const subscriptionState =
+    record.subscription_state === false || record.subscription_state === null
+      ? null
+      : sanitizeLabel(record.subscription_state, 40);
+  const invoiceIds = sanitizeLineIds(record.invoice_ids);
   if (
-    record.state !== 'draft' ||
-    record.subscription_state !== '2_renewal' ||
     record.is_subscription !== true ||
+    typeof record.locked !== 'boolean' ||
     !subscription ||
     subscription[0] !== rootSourceOrderId ||
     !origin ||
@@ -923,20 +946,56 @@ async function readVerifiedOwnedQuote(
   }
   const lineState = await readCommercialLineState(rpc, quoteId, record.order_line);
   return {
+    state,
+    subscriptionState,
+    locked: record.locked,
+    invoiceIds,
+    fingerprint: {
+      rootSourceOrderId,
+      originRootOrderId,
+      parentQuoteId,
+      ...commercialIdentity,
+      planId: plan[0],
+      templateId: template[0],
+      templateClass: expectedTemplateClass,
+      currencyRounding,
+      createDate: sanitizeServerWriteDate(record.create_date),
+      writeDate: sanitizeServerWriteDate(record.write_date),
+      currentContractMonths,
+      lineFingerprint: lineState.fingerprint,
+      commercialLines: lineState.lines,
+    },
+  };
+}
+
+async function readVerifiedOwnedQuote(
+  rpc: RenewalRpcContext,
+  quoteId: number,
+  rootSourceOrderId: number,
+  originRootOrderId: number,
+  parentQuoteId: number,
+  expectedIdentity: CommercialIdentity,
+  expectedMonths: number,
+  expectedTemplateClass: RenewalTemplateClass,
+  expectedTemplateId: number | null,
+  currencyRounding: number,
+): Promise<RenewalOwnedQuoteFingerprint> {
+  const current = await readOwnedQuote(
+    rpc,
+    quoteId,
     rootSourceOrderId,
     originRootOrderId,
     parentQuoteId,
-    ...commercialIdentity,
-    planId: plan[0],
-    templateId: template[0],
-    templateClass: expectedTemplateClass,
+    expectedIdentity,
+    expectedMonths,
+    expectedTemplateClass,
+    expectedTemplateId,
     currencyRounding,
-    createDate: sanitizeServerWriteDate(record.create_date),
-    writeDate: sanitizeServerWriteDate(record.write_date),
-    currentContractMonths,
-    lineFingerprint: lineState.fingerprint,
-    commercialLines: lineState.lines,
-  };
+  );
+  if (current.state !== 'draft' || current.subscriptionState !== '2_renewal' || current.locked) {
+    throw bridgeFailure('incompatible_response');
+  }
+  return current.fingerprint;
 }
 
 async function assertOwnedQuoteStillMatches(
@@ -995,6 +1054,68 @@ async function refreshOwnedQuoteAfterMutation(
   ownedQuote.writeDate = current.writeDate;
   ownedQuote.lineFingerprint = current.lineFingerprint;
   ownedQuote.commercialLines = cloneCommercialLines(current.commercialLines);
+}
+
+function assertStableOwnedQuoteFingerprint(
+  current: RenewalOwnedQuoteFingerprint,
+  ownedQuote: OwnedQuote,
+  requireWriteDate: boolean,
+): void {
+  if (
+    current.createDate !== ownedQuote.createDate ||
+    (requireWriteDate && current.writeDate !== ownedQuote.writeDate) ||
+    current.planId !== ownedQuote.planId ||
+    current.templateId !== ownedQuote.templateId ||
+    current.lineFingerprint !== ownedQuote.lineFingerprint
+  ) {
+    throw bridgeFailure('incompatible_response');
+  }
+}
+
+async function assertNoDraftLinkedInvoices(
+  rpc: RenewalRpcContext,
+  invoiceIds: number[],
+): Promise<void> {
+  if (invoiceIds.length === 0) return;
+  const invoices = await readMany(rpc, 'account.move', invoiceIds, INVOICE_STATE_FIELDS);
+  for (const invoice of invoices) {
+    const state = sanitizeLabel(invoice.state, 40);
+    // Odoo's native sale-order cancellation only mutates linked draft invoices. Historical
+    // posted/cancelled invoices are expected on renewal quotations and are safe to leave linked.
+    if (state !== 'posted' && state !== 'cancel') {
+      throw bridgeFailure('incompatible_response');
+    }
+  }
+}
+
+async function readIntermediateCancellationState(
+  rpc: RenewalRpcContext,
+  quoteId: number,
+  ownedQuote: OwnedQuote,
+  expectedState: 'draft' | 'cancel',
+): Promise<void> {
+  const current = await readOwnedQuote(
+    rpc,
+    quoteId,
+    ownedQuote.rootSourceOrderId,
+    ownedQuote.originRootOrderId,
+    ownedQuote.parentQuoteId,
+    ownedQuote,
+    ownedQuote.currentContractMonths,
+    ownedQuote.templateClass,
+    ownedQuote.templateId,
+    ownedQuote.currencyRounding,
+  );
+  if (
+    current.state !== expectedState ||
+    (expectedState === 'draft' && (current.subscriptionState !== '2_renewal' || current.locked))
+  ) {
+    throw bridgeFailure('incompatible_response');
+  }
+  assertStableOwnedQuoteFingerprint(current.fingerprint, ownedQuote, expectedState === 'draft');
+  if (expectedState === 'draft') {
+    await assertNoDraftLinkedInvoices(rpc, current.invoiceIds);
+  }
 }
 
 function sanitizeQuoteAction(result: unknown): number {
@@ -1359,6 +1480,7 @@ export class RenewalOwnershipRegistry {
     runId: string,
     quoteId: number,
     fingerprint: RenewalOwnedQuoteFingerprint,
+    retention: RenewalQuoteRetention = 'selected',
   ): void {
     let runs = this.clients.get(clientId);
     if (!runs) {
@@ -1397,18 +1519,43 @@ export class RenewalOwnershipRegistry {
     ) {
       throw bridgeFailure('incompatible_response');
     }
+    if (retention !== 'selected' && retention !== 'intermediate') {
+      throw bridgeFailure('incompatible_response');
+    }
     sanitizeServerWriteDate(fingerprint.createDate);
     sanitizeServerWriteDate(fingerprint.writeDate);
-    quotes.set(quoteId, {
+    const ownedQuote = {
       ...fingerprint,
       commercialLines: cloneCommercialLines(fingerprint.commercialLines),
+      cancelled: false,
+    } as OwnedQuote;
+    Object.defineProperty(ownedQuote, 'retention', {
+      value: retention,
+      enumerable: true,
+      writable: false,
+      configurable: false,
     });
+    quotes.set(quoteId, ownedQuote);
   }
 
   require(clientId: string, runId: string, quoteId: number): OwnedQuote {
     const quote = this.clients.get(clientId)?.get(runId)?.get(quoteId);
     if (!quote) throw bridgeFailure('incompatible_endpoint');
     return quote;
+  }
+
+  listIntermediate(clientId: string, runId: string): [number, OwnedQuote][] {
+    const quotes = this.clients.get(clientId)?.get(runId);
+    if (!quotes) throw bridgeFailure('incompatible_endpoint');
+    return [...quotes.entries()]
+      .filter(([, quote]) => quote.retention === 'intermediate')
+      .sort(([left], [right]) => left - right);
+  }
+
+  markCancelled(clientId: string, runId: string, quoteId: number): void {
+    const quote = this.require(clientId, runId, quoteId);
+    if (quote.retention !== 'intermediate') throw bridgeFailure('incompatible_endpoint');
+    quote.cancelled = true;
   }
 
   registerCopyAction(
@@ -1443,20 +1590,30 @@ export class RenewalOwnershipRegistry {
     runId: string,
     pending: Omit<PendingQuoteCreation, 'responseReceived' | 'returnedQuoteId'>,
   ): void {
+    if (pending.retention !== 'selected' && pending.retention !== 'intermediate') {
+      throw bridgeFailure('incompatible_response');
+    }
     let runs = this.pendingCreations.get(clientId);
     if (!runs) {
       runs = new Map();
       this.pendingCreations.set(clientId, runs);
     }
     if (runs.has(runId)) throw bridgeFailure('incompatible_endpoint');
-    runs.set(runId, {
+    const storedPending = {
       ...pending,
       expectedIdentity: { ...pending.expectedIdentity },
       sourceCommercialLines: cloneCommercialLines(pending.sourceCommercialLines),
       existingLinkedQuoteIds: new Set(pending.existingLinkedQuoteIds),
       responseReceived: false,
       returnedQuoteId: null,
+    } as PendingQuoteCreation;
+    Object.defineProperty(storedPending, 'retention', {
+      value: pending.retention,
+      enumerable: true,
+      writable: false,
+      configurable: false,
     });
+    runs.set(runId, storedPending);
   }
 
   markCreationResponseReceived(
@@ -1499,6 +1656,61 @@ export class RenewalOwnershipRegistry {
   }
 }
 
+async function readCancelledIntermediateResult(
+  clientId: string,
+  runId: string,
+  ownership: RenewalOwnershipRegistry,
+  rpc: RenewalRpcContext,
+): Promise<{ cancelledQuoteIds: number[]; alreadyCancelledQuoteIds: number[] }> {
+  const intermediates = ownership.listIntermediate(clientId, runId);
+  const cancelledQuoteIds = intermediates
+    .filter(([, quote]) => !quote.cancelled)
+    .map(([quoteId]) => quoteId);
+  const alreadyCancelledQuoteIds = intermediates
+    .filter(([, quote]) => quote.cancelled)
+    .map(([quoteId]) => quoteId);
+  for (const [quoteId, quote] of intermediates) {
+    await readIntermediateCancellationState(rpc, quoteId, quote, 'cancel');
+  }
+  for (const quoteId of cancelledQuoteIds) {
+    ownership.markCancelled(clientId, runId, quoteId);
+  }
+  return { cancelledQuoteIds, alreadyCancelledQuoteIds };
+}
+
+async function cancelIntermediateRenewalQuotes(
+  clientId: string,
+  runId: string,
+  ownership: RenewalOwnershipRegistry,
+  rpc: RenewalRpcContext,
+): Promise<{ cancelledQuoteIds: number[]; alreadyCancelledQuoteIds: number[] }> {
+  const intermediates = ownership.listIntermediate(clientId, runId);
+  const pendingCancellation = intermediates.filter(([, quote]) => !quote.cancelled);
+  const alreadyCancelled = intermediates.filter(([, quote]) => quote.cancelled);
+
+  // Validate every owned intermediate before the first mutation. A selected quote is never
+  // returned by the registry and therefore can never reach the native cancellation method.
+  for (const [quoteId, quote] of pendingCancellation) {
+    await readIntermediateCancellationState(rpc, quoteId, quote, 'draft');
+  }
+  for (const [quoteId, quote] of alreadyCancelled) {
+    await readIntermediateCancellationState(rpc, quoteId, quote, 'cancel');
+  }
+
+  const quoteIds = pendingCancellation.map(([quoteId]) => quoteId);
+  if (quoteIds.length === 0) {
+    return {
+      cancelledQuoteIds: [],
+      alreadyCancelledQuoteIds: alreadyCancelled.map(([quoteId]) => quoteId),
+    };
+  }
+
+  // One closed, batched native call. The return value is intentionally ignored because custom
+  // Odoo overrides may vary; the post-read below is the authoritative success condition.
+  await callKw(rpc, 'sale.order', 'action_cancel', [quoteIds], {});
+  return readCancelledIntermediateResult(clientId, runId, ownership, rpc);
+}
+
 async function executeRenewalOperation(
   operation: RenewalBridgeOperation,
   clientId: string,
@@ -1512,6 +1724,10 @@ async function executeRenewalOperation(
   if (operation.name === 'finishRenewalRun') {
     ownership.finishRun(clientId, operation.runId);
     return true;
+  }
+
+  if (operation.name === 'cancelIntermediateRenewalQuotes') {
+    return cancelIntermediateRenewalQuotes(clientId, operation.runId, ownership, rpc);
   }
 
   if (operation.name === 'createNativeRenewal') {
@@ -1576,6 +1792,7 @@ async function executeRenewalOperation(
       compareNativeDiscountLines: true,
       priceMode: 'same',
       existingLinkedQuoteIds: existingLinkedQuotes,
+      retention: operation.retention,
     });
     const action = await callButton(
       rpc,
@@ -1604,7 +1821,7 @@ async function executeRenewalOperation(
     const pending = ownership.getPendingCreation(clientId, operation.runId);
     if (!pending) throw bridgeFailure('incompatible_endpoint');
     await assertCreatedQuoteTransformation(rpc, fingerprint, pending);
-    ownership.register(clientId, operation.runId, quoteId, fingerprint);
+    ownership.register(clientId, operation.runId, quoteId, fingerprint, pending.retention);
     ownership.finishCreation(clientId, operation.runId);
     return { quoteId };
   }
@@ -1639,6 +1856,7 @@ async function executeRenewalOperation(
       compareNativeDiscountLines: false,
       priceMode: sourceMonths < 12 && targetMonths === 12 ? 'annual-reprice' : 'duration-scale',
       existingLinkedQuoteIds: existingLinkedQuotes,
+      retention: operation.retention,
     });
     const action = await postJsonRpc(rpc, '/web/action/run', {
       action_id: expectedActionId,
@@ -1665,7 +1883,7 @@ async function executeRenewalOperation(
     const pending = ownership.getPendingCreation(clientId, operation.runId);
     if (!pending) throw bridgeFailure('incompatible_endpoint');
     await assertCreatedQuoteTransformation(rpc, fingerprint, pending);
-    ownership.register(clientId, operation.runId, quoteId, fingerprint);
+    ownership.register(clientId, operation.runId, quoteId, fingerprint, pending.retention);
     ownership.finishCreation(clientId, operation.runId);
     return { quoteId };
   }
@@ -1828,7 +2046,7 @@ async function attemptPendingCreationReconciliation(
       pending.currencyRounding,
     );
     await assertCreatedQuoteTransformation(rpc, fingerprint, pending);
-    ownership.register(clientId, runId, quoteId, fingerprint);
+    ownership.register(clientId, runId, quoteId, fingerprint, pending.retention);
     ownership.finishCreation(clientId, runId);
     return { kind: 'found', quoteId };
   } catch (error) {
@@ -1894,6 +2112,33 @@ async function reconcilePendingCreation(
   }
 }
 
+async function reconcileIntermediateCancellation(
+  ownership: RenewalOwnershipRegistry,
+  clientId: string,
+  runId: string,
+  options: {
+    fetcher: typeof fetch;
+    origin: string;
+    requestId: string | null;
+    timeoutMs: number;
+  },
+): Promise<{ cancelledQuoteIds: number[]; alreadyCancelledQuoteIds: number[] } | null> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), Math.max(0, options.timeoutMs));
+  try {
+    return await readCancelledIntermediateResult(clientId, runId, ownership, {
+      fetcher: options.fetcher,
+      origin: options.origin,
+      requestId: options.requestId,
+      signal: controller.signal,
+    });
+  } catch {
+    return null;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 export async function executeOdooRenewalOperation(
   operation: RenewalBridgeOperation,
   options: {
@@ -1938,6 +2183,23 @@ export async function executeOdooRenewalOperation(
       ? ownership.getPendingCreation(clientId, pendingRunId)
       : null;
     const uncertainTransport = isUncertainTransportError(error);
+
+    if (operation.name === 'cancelIntermediateRenewalQuotes' && uncertainTransport) {
+      const reconciled = await reconcileIntermediateCancellation(
+        ownership,
+        clientId,
+        operation.runId,
+        {
+          fetcher,
+          origin,
+          requestId: options.requestId ?? null,
+          timeoutMs: options.reconciliationTimeoutMs ?? RENEWAL_RECONCILIATION_TIMEOUT_MS,
+        },
+      );
+      return reconciled
+        ? { ok: true, result: reconciled }
+        : { ok: false, failure: bridgeFailure('timeout') };
+    }
 
     // The Odoo action returned a concrete new quote ID, but a later local ownership
     // check failed. Expose the ID only as an unknown result and stop the controller;

@@ -218,8 +218,8 @@ const POPOVER_STYLES = `
   border-top: 1px solid var(--renewal-border);
 }
 .renewal-footer-stage {
-  width: 92px;
-  min-width: 92px;
+  width: 112px;
+  min-width: 112px;
   height: 36px;
   min-height: 36px;
 }
@@ -260,6 +260,23 @@ const POPOVER_STYLES = `
   border-top-color: var(--renewal-loader);
   border-radius: 50%;
   animation: renewal-loader-spin 720ms linear infinite;
+}
+.renewal-cleanup-status {
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--renewal-muted);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.renewal-cleanup-status .renewal-loader {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-inline-end: 6px;
 }
 .renewal-create,
 .renewal-copy,
@@ -499,6 +516,9 @@ export function RenewalPopover({
   const locked = snapshot.phase !== 'idle';
   const selectedTargets = snapshot.targets.filter((target) => target.selected);
   const selectedCount = selectedTargets.length;
+  const cleanupRunning = snapshot.cleanup.phase === 'running';
+  const creationRunning =
+    !cleanupRunning && (snapshot.phase === 'preflight' || snapshot.phase === 'running');
   const canStartAnotherRun =
     snapshot.phase === 'success' || snapshot.phase === 'partial' || snapshot.phase === 'unknown';
 
@@ -770,25 +790,40 @@ export function RenewalPopover({
                 disabled={locked || selectedCount === 0 || invalidSelectedYears.length > 0}
                 onClick={() => void controller.start()}
               >
-                {snapshot.phase === 'preflight' || snapshot.phase === 'running'
-                  ? `Creating (${snapshot.completedCount} of ${selectedCount})…`
-                  : `Create ${selectedCount || ''} ${selectedCount === 1 ? 'quotation' : 'quotations'}`.replace(
-                      '  ',
-                      ' ',
-                    )}
+                {cleanupRunning
+                  ? 'Finishing…'
+                  : creationRunning
+                    ? `Creating (${snapshot.completedCount} of ${selectedCount})…`
+                    : `Create ${selectedCount || ''} ${selectedCount === 1 ? 'quotation' : 'quotations'}`.replace(
+                        '  ',
+                        ' ',
+                      )}
               </button>
             )}
             <FadeSwap
               className="renewal-footer-stage"
               transitionKey={
-                snapshot.phase === 'preflight' || snapshot.phase === 'running'
-                  ? 'loading'
-                  : snapshot.results.length > 0
-                    ? `results-${snapshot.results.length}`
-                    : 'empty'
+                cleanupRunning
+                  ? `cleanup-${snapshot.cleanup.completed}-${snapshot.cleanup.total}`
+                  : creationRunning
+                    ? 'loading'
+                    : snapshot.results.length > 0
+                      ? `results-${snapshot.results.length}`
+                      : 'empty'
               }
             >
-              {snapshot.phase === 'preflight' || snapshot.phase === 'running' ? (
+              {cleanupRunning ? (
+                <span
+                  className="renewal-cleanup-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  aria-label={`Canceling intermediate quotations (${snapshot.cleanup.completed} of ${snapshot.cleanup.total})`}
+                >
+                  <span className="renewal-loader" aria-hidden="true" />
+                  <span aria-hidden="true">Cleaning up…</span>
+                </span>
+              ) : creationRunning ? (
                 <span
                   className="renewal-loader"
                   role="status"

@@ -88,6 +88,8 @@ function ownershipFieldDefinitions(): Record<string, unknown> {
     plan_id: { type: 'many2one', relation: 'sale.subscription.plan' },
     sale_order_template_id: { type: 'many2one', relation: 'sale.order.template' },
     order_line: { type: 'one2many', relation: 'sale.order.line' },
+    locked: { type: 'boolean' },
+    invoice_ids: { type: 'many2many', relation: 'account.move' },
   };
 }
 
@@ -385,6 +387,11 @@ function ownedQuoteVerificationSteps(
     originRootOrderId?: number;
     templateId?: number;
     lineRecords?: Record<string, unknown>[];
+    state?: 'draft' | 'cancel';
+    subscriptionState?: string | false;
+    locked?: boolean;
+    invoiceIds?: number[];
+    writeDate?: string;
   } = {},
 ): RpcStep[] {
   const lineRecords = options.lineRecords ?? [];
@@ -394,8 +401,8 @@ function ownedQuoteVerificationSteps(
       result: [
         {
           id: orderId,
-          state: 'draft',
-          subscription_state: '2_renewal',
+          state: options.state ?? 'draft',
+          subscription_state: options.subscriptionState ?? '2_renewal',
           is_subscription: true,
           subscription_id: [rootSourceOrderId, 'Private source'],
           origin_order_id: [options.originRootOrderId ?? rootSourceOrderId, 'Private origin'],
@@ -404,10 +411,12 @@ function ownedQuoteVerificationSteps(
           currency_id: [2, 'USD'],
           pricelist_id: [4, 'Private pricelist'],
           create_date: createDate,
-          write_date: createDate,
+          write_date: options.writeDate ?? createDate,
           plan_id: [planId, 'Private plan label'],
           sale_order_template_id: [options.templateId ?? 80 + planId, 'Private template'],
           order_line: lineRecords.map((record) => record.id),
+          locked: options.locked ?? false,
+          invoice_ids: options.invoiceIds ?? [],
         },
       ],
     },
@@ -434,6 +443,15 @@ function ownedQuoteVerificationSteps(
         ]
       : []),
   ];
+}
+
+function invoiceStateStep(
+  invoices: Array<{ id: number; state: 'draft' | 'posted' | 'cancel' }>,
+): RpcStep {
+  return {
+    path: '/web/dataset/call_kw/account.move/read',
+    result: invoices,
+  };
 }
 
 function preflightSteps(
@@ -680,7 +698,9 @@ describe('closed renewal bridge runtime', () => {
           context: { private: 'does not cross' },
         },
       },
-      ...ownedQuoteVerificationSteps(82, 7, 1, 'year'),
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        invoiceIds: [901, 902],
+      }),
     ];
     const fetcher = queuedFetcher(steps);
 
@@ -697,6 +717,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -718,6 +739,41 @@ describe('closed renewal bridge runtime', () => {
     expect(unauthorizedFetcher).not.toHaveBeenCalled();
   });
 
+  it('requires the native many-to-many invoice relation before creating a renewal', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    const steps: RpcStep[] = [
+      ...preflightSteps(42, 7, 1, 'year'),
+      {
+        path: '/web/dataset/call_kw/sale.order/fields_get',
+        result: {
+          ...ownershipFieldDefinitions(),
+          invoice_ids: { type: 'one2many', relation: 'account.move' },
+        },
+      },
+    ];
+    const fetcher = queuedFetcher(steps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        {
+          name: 'createNativeRenewal',
+          sourceOrderId: 42,
+          runId,
+          expected: {
+            planId: 7,
+            currentContractMonths: 12,
+            writeDate: '2026-08-14 12:00:00',
+          },
+          requiredCopyYears: [],
+          requiresDiscount: false,
+          retention: 'selected',
+        },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
+    expect(steps).toHaveLength(0);
+  });
+
   it('finishes only the requested run and revokes its quotes and resolved Copy actions', async () => {
     const ownership = new RenewalOwnershipRegistry();
     const secondRunId = 'renewal-secondrun1';
@@ -737,9 +793,17 @@ describe('closed renewal bridge runtime', () => {
       compareNativeDiscountLines: false,
       priceMode: 'duration-scale',
       existingLinkedQuoteIds: new Set([70, 71, 82]),
+      retention: 'selected',
     });
     ownership.register(clientId, secondRunId, 83, ownedFingerprint(42, 24));
     ownership.registerCopyAction(clientId, secondRunId, 3, 9303);
+    expect(
+      Object.getOwnPropertyDescriptor(ownership.getPendingCreation(clientId, runId), 'retention'),
+    ).toMatchObject({
+      value: 'selected',
+      writable: false,
+      configurable: false,
+    });
     const fetcher = vi.fn<typeof fetch>();
 
     await expect(
@@ -753,7 +817,7 @@ describe('closed renewal bridge runtime', () => {
 
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId, retention: 'selected' },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_endpoint' } });
@@ -776,6 +840,290 @@ describe('closed renewal bridge runtime', () => {
     ownership.registerCopyAction(clientId, runId, 4, 9304);
     expect(ownership.require(clientId, runId, 84).currentContractMonths).toBe(36);
     expect(ownership.requireCopyAction(clientId, runId, 4)).toBe(9304);
+  });
+
+  it('cancels only immutable intermediate quotes in one native batch and is idempotent', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    ownership.register(clientId, runId, 82, ownedFingerprint(42, 12), 'intermediate');
+    ownership.register(
+      clientId,
+      runId,
+      83,
+      ownedFingerprint(82, 24, 42, '2026-08-14 13:01:00', {
+        planId: 9,
+        templateId: 89,
+      }),
+      'intermediate',
+    );
+    ownership.register(clientId, runId, 84, ownedFingerprint(83, 60), 'selected');
+    const steps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year'),
+      ...ownedQuoteVerificationSteps(83, 9, 2, 'year', 42, '2026-08-14 13:01:00', {
+        templateId: 89,
+      }),
+      { path: '/web/dataset/call_kw/sale.order/action_cancel', result: true },
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        state: 'cancel',
+        subscriptionState: false,
+        writeDate: '2026-08-14 13:02:00',
+      }),
+      ...ownedQuoteVerificationSteps(83, 9, 2, 'year', 42, '2026-08-14 13:01:00', {
+        templateId: 89,
+        state: 'cancel',
+        subscriptionState: false,
+        writeDate: '2026-08-14 13:02:00',
+      }),
+    ];
+    const fetcher = queuedFetcher(steps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: { cancelledQuoteIds: [82, 83], alreadyCancelledQuoteIds: [] },
+    });
+    const cancelCalls = (fetcher as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>
+      String(call[0]).endsWith('/sale.order/action_cancel'),
+    );
+    expect(cancelCalls).toHaveLength(1);
+    expect(JSON.parse(String(cancelCalls[0]?.[1]?.body))).toMatchObject({
+      params: { model: 'sale.order', method: 'action_cancel', args: [[82, 83]], kwargs: {} },
+    });
+    expect(ownership.require(clientId, runId, 84)).toMatchObject({
+      retention: 'selected',
+      cancelled: false,
+    });
+    expect(steps).toHaveLength(0);
+
+    const idempotentSteps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        state: 'cancel',
+        subscriptionState: false,
+        writeDate: '2026-08-14 13:02:00',
+      }),
+      ...ownedQuoteVerificationSteps(83, 9, 2, 'year', 42, '2026-08-14 13:01:00', {
+        templateId: 89,
+        state: 'cancel',
+        subscriptionState: false,
+        writeDate: '2026-08-14 13:02:00',
+      }),
+    ];
+    const idempotentFetcher = queuedFetcher(idempotentSteps);
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        { fetcher: idempotentFetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: { cancelledQuoteIds: [], alreadyCancelledQuoteIds: [82, 83] },
+    });
+    expect(
+      (idempotentFetcher as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
+        String(call[0]).endsWith('/sale.order/action_cancel'),
+      ),
+    ).toBe(false);
+    expect(idempotentSteps).toHaveLength(0);
+  });
+
+  it('prevalidates every intermediate and refuses locked quotes before cancellation', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    ownership.register(clientId, runId, 82, ownedFingerprint(42, 12), 'intermediate');
+    ownership.register(
+      clientId,
+      runId,
+      83,
+      ownedFingerprint(82, 24, 42, '2026-08-14 13:01:00', {
+        planId: 9,
+        templateId: 89,
+      }),
+      'intermediate',
+    );
+    const steps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year'),
+      ...ownedQuoteVerificationSteps(83, 9, 2, 'year', 42, '2026-08-14 13:01:00', {
+        templateId: 89,
+        locked: true,
+      }),
+    ];
+    const fetcher = queuedFetcher(steps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
+    expect(
+      (fetcher as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
+        String(call[0]).endsWith('/sale.order/action_cancel'),
+      ),
+    ).toBe(false);
+    expect(steps).toHaveLength(0);
+  });
+
+  it('cancels intermediates with historical invoices but refuses linked draft invoices', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    ownership.register(clientId, runId, 82, ownedFingerprint(42, 12), 'intermediate');
+    const historicalSteps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        invoiceIds: [901, 902],
+      }),
+      invoiceStateStep([
+        { id: 901, state: 'posted' },
+        { id: 902, state: 'cancel' },
+      ]),
+      { path: '/web/dataset/call_kw/sale.order/action_cancel', result: true },
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        state: 'cancel',
+        subscriptionState: false,
+        invoiceIds: [901, 902],
+        writeDate: '2026-08-14 13:02:00',
+      }),
+    ];
+    const historicalFetcher = queuedFetcher(historicalSteps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        { fetcher: historicalFetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: { cancelledQuoteIds: [82], alreadyCancelledQuoteIds: [] },
+    });
+    expect(historicalSteps).toHaveLength(0);
+
+    const draftRunId = 'renewal-draftinvoice1';
+    ownership.register(clientId, draftRunId, 83, ownedFingerprint(42, 12), 'intermediate');
+    const draftSteps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(83, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        invoiceIds: [903],
+      }),
+      invoiceStateStep([{ id: 903, state: 'draft' }]),
+    ];
+    const draftFetcher = queuedFetcher(draftSteps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId: draftRunId },
+        { fetcher: draftFetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_response' } });
+    expect(
+      (draftFetcher as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
+        String(call[0]).endsWith('/sale.order/action_cancel'),
+      ),
+    ).toBe(false);
+    expect(draftSteps).toHaveLength(0);
+  });
+
+  it('reconciles an uncertain cancellation by read only and never retries action_cancel', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    ownership.register(clientId, runId, 82, ownedFingerprint(42, 12), 'intermediate');
+    const steps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year'),
+      {
+        path: '/web/dataset/call_kw/sale.order/action_cancel',
+        error: new TypeError('Network connection closed after commit'),
+      },
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year', 42, '2026-08-14 13:00:00', {
+        state: 'cancel',
+        subscriptionState: false,
+        writeDate: '2026-08-14 13:02:00',
+      }),
+    ];
+    const fetcher = queuedFetcher(steps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        {
+          fetcher,
+          origin: ODOO_BRIDGE_ORIGIN,
+          clientId,
+          ownership,
+          reconciliationTimeoutMs: 50,
+        },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: { cancelledQuoteIds: [82], alreadyCancelledQuoteIds: [] },
+    });
+    expect(
+      (fetcher as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>
+        String(call[0]).endsWith('/sale.order/action_cancel'),
+      ),
+    ).toHaveLength(1);
+    expect(steps).toHaveLength(0);
+  });
+
+  it('cannot reach selected or pre-existing quotes through the run-only cancellation contract', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    ownership.register(clientId, runId, 82, ownedFingerprint(42, 12), 'selected');
+    const retained = ownership.require(clientId, runId, 82);
+    expect(Object.getOwnPropertyDescriptor(retained, 'retention')).toMatchObject({
+      value: 'selected',
+      writable: false,
+      configurable: false,
+    });
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      result: { cancelledQuoteIds: [], alreadyCancelledQuoteIds: [] },
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId: 'renewal-foreign1' },
+        { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_endpoint' } });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('reports timeout when read-only reconciliation cannot confirm cancellation', async () => {
+    const ownership = new RenewalOwnershipRegistry();
+    ownership.register(clientId, runId, 82, ownedFingerprint(42, 12), 'intermediate');
+    const steps: RpcStep[] = [
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year'),
+      {
+        path: '/web/dataset/call_kw/sale.order/action_cancel',
+        error: new TypeError('Network connection closed before commit'),
+      },
+      ...ownedQuoteVerificationSteps(82, 7, 1, 'year'),
+    ];
+    const fetcher = queuedFetcher(steps);
+
+    await expect(
+      executeOdooRenewalOperation(
+        { name: 'cancelIntermediateRenewalQuotes', runId },
+        {
+          fetcher,
+          origin: ODOO_BRIDGE_ORIGIN,
+          clientId,
+          ownership,
+          reconciliationTimeoutMs: 50,
+        },
+      ),
+    ).resolves.toMatchObject({ ok: false, failure: { code: 'timeout' } });
+    expect(
+      (fetcher as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>
+        String(call[0]).endsWith('/sale.order/action_cancel'),
+      ),
+    ).toHaveLength(1);
+    expect(ownership.require(clientId, runId, 82).cancelled).toBe(false);
+    expect(steps).toHaveLength(0);
   });
 
   it.each([
@@ -847,6 +1195,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -884,6 +1233,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: false,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -936,6 +1286,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [5],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1002,6 +1353,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [5],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1066,13 +1418,14 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [5],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toEqual({ ok: true, result: { quoteId: 82 } });
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId, retention: 'selected' },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toEqual({ ok: true, result: { quoteId: 83 } });
@@ -1138,6 +1491,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1198,6 +1552,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: false,
+          retention: 'selected',
         },
         { fetcher: queuedFetcher(steps), origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1227,7 +1582,7 @@ describe('closed renewal bridge runtime', () => {
 
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId, retention: 'selected' },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toEqual({ ok: true, result: { quoteId: 83 } });
@@ -1296,7 +1651,7 @@ describe('closed renewal bridge runtime', () => {
 
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId, retention: 'selected' },
         { fetcher: queuedFetcher(steps), origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toEqual({
@@ -1355,7 +1710,7 @@ describe('closed renewal bridge runtime', () => {
 
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 5, runId, retention: 'selected' },
         { fetcher: queuedFetcher(steps), origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toEqual({ ok: true, result: { quoteId: 83 } });
@@ -1404,7 +1759,7 @@ describe('closed renewal bridge runtime', () => {
 
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 1, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 1, runId, retention: 'selected' },
         { fetcher: queuedFetcher(steps), origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toEqual({ ok: true, result: { quoteId: 83 } });
@@ -1593,7 +1948,7 @@ describe('closed renewal bridge runtime', () => {
 
     await expect(
       executeOdooRenewalOperation(
-        { name: 'copyNativePlan', sourceQuoteId: 82, years: 3, runId },
+        { name: 'copyNativePlan', sourceQuoteId: 82, years: 3, runId, retention: 'selected' },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
     ).resolves.toMatchObject({ ok: false, failure: { code: 'incompatible_endpoint' } });
@@ -1633,6 +1988,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [5],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1677,6 +2033,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [5],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1743,6 +2100,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         {
           fetcher,
@@ -1788,6 +2146,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'intermediate',
         },
         {
           fetcher,
@@ -1807,6 +2166,7 @@ describe('closed renewal bridge runtime', () => {
       String(call[0]).endsWith('/sale.order/prepare_renewal_order'),
     );
     expect(renewCalls).toHaveLength(1);
+    expect(ownership.require(clientId, runId, 82).retention).toBe('intermediate');
     expect(steps).toHaveLength(0);
   });
 
@@ -1834,6 +2194,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1886,6 +2247,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1943,6 +2305,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         { fetcher, origin: ODOO_BRIDGE_ORIGIN, clientId, ownership },
       ),
@@ -1982,6 +2345,7 @@ describe('closed renewal bridge runtime', () => {
           },
           requiredCopyYears: [],
           requiresDiscount: true,
+          retention: 'selected',
         },
         {
           fetcher,
@@ -2026,6 +2390,7 @@ describe('closed renewal bridge runtime', () => {
             },
             requiredCopyYears: [],
             requiresDiscount: true,
+            retention: 'selected',
           },
           {
             fetcher,

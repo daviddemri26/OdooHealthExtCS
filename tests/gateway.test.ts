@@ -190,7 +190,7 @@ describe('page-context Odoo gateway', () => {
     enablePing(bridgeWindow);
     const gateway = new PageContextOdooGateway(bridgeWindow);
 
-    const pending = gateway.copyNativePlan(81, 5, 'renewal-12345678');
+    const pending = gateway.copyNativePlan(81, 5, 'renewal-12345678', 'selected');
     const [request] = await waitForRenewals(bridgeWindow, 1);
     expect(request).toMatchObject({
       kind: 'renewal',
@@ -199,6 +199,7 @@ describe('page-context Odoo gateway', () => {
         sourceQuoteId: 81,
         years: 5,
         runId: 'renewal-12345678',
+        retention: 'selected',
       },
     });
     bridgeWindow.respond(request!, { quoteId: 82 });
@@ -251,6 +252,7 @@ describe('page-context Odoo gateway', () => {
       },
       [1, 5],
       true,
+      'intermediate',
     );
     const [request] = await waitForRenewals(bridgeWindow, 1);
     expect(request).toMatchObject({
@@ -266,6 +268,7 @@ describe('page-context Odoo gateway', () => {
         },
         requiredCopyYears: [1, 5],
         requiresDiscount: true,
+        retention: 'intermediate',
       },
     });
     bridgeWindow.respond(request!, { quoteId: 82 });
@@ -289,6 +292,30 @@ describe('page-context Odoo gateway', () => {
     bridgeWindow.respond(request!, true);
 
     await expect(pending).resolves.toBeUndefined();
+    expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('cancels intermediates through a run-only closed operation', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.cancelIntermediateRenewalQuotes('renewal-12345678');
+    const [request] = await waitForRenewals(bridgeWindow, 1);
+    expect(request).toMatchObject({
+      kind: 'renewal',
+      operation: { name: 'cancelIntermediateRenewalQuotes', runId: 'renewal-12345678' },
+    });
+    bridgeWindow.respond(request!, {
+      cancelledQuoteIds: [82, 83],
+      alreadyCancelledQuoteIds: [],
+    });
+
+    await expect(pending).resolves.toEqual({
+      cancelledQuoteIds: [82, 83],
+      alreadyCancelledQuoteIds: [],
+    });
     expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
     gateway.dispose();
   });
@@ -324,11 +351,12 @@ describe('page-context Odoo gateway', () => {
             },
             [],
             false,
+            'selected',
           ),
         invalidResult: { quoteId: 42 },
       },
       {
-        invoke: (gateway) => gateway.copyNativePlan(81, 5, 'renewal-12345678'),
+        invoke: (gateway) => gateway.copyNativePlan(81, 5, 'renewal-12345678', 'selected'),
         invalidResult: { quoteId: 81 },
       },
       {
@@ -368,6 +396,10 @@ describe('page-context Odoo gateway', () => {
           multiYearDiscountLineCount: 0,
           lines: [],
         },
+      },
+      {
+        invoke: (gateway) => gateway.cancelIntermediateRenewalQuotes('renewal-12345678'),
+        invalidResult: { cancelledQuoteIds: [82], alreadyCancelledQuoteIds: [82] },
       },
       {
         invoke: (gateway) => gateway.finishRenewalRun('renewal-12345678'),

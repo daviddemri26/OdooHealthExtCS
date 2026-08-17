@@ -13,6 +13,7 @@ import {
   parseRenewalCreatedQuoteResult,
   parseRenewalDiscountApplyResult,
   parseRenewalDiscountClearResult,
+  parseRenewalIntermediateCancellationResult,
   parseRenewalPreflightResult,
   parseRenewalQuoteSummary,
   parseRenewalShareLinkResult,
@@ -196,6 +197,7 @@ describe('Odoo bridge allow-list', () => {
         },
         requiredCopyYears: [1, 5],
         requiresDiscount: true,
+        retention: 'selected',
       }),
     ).toBe(true);
     expect(
@@ -210,6 +212,7 @@ describe('Odoo bridge allow-list', () => {
         },
         requiredCopyYears: [],
         requiresDiscount: false,
+        retention: 'intermediate',
       }),
     ).toBe(true);
     expect(
@@ -240,6 +243,7 @@ describe('Odoo bridge allow-list', () => {
         writeDate: '2026-08-14 12:00:00',
       },
       requiresDiscount: true,
+      retention: 'selected',
     };
     expect(isRenewalBridgeOperation({ ...createOperation, requiredCopyYears: [5, 1] })).toBe(false);
     expect(isRenewalBridgeOperation({ ...createOperation, requiredCopyYears: [1, 1] })).toBe(false);
@@ -265,6 +269,15 @@ describe('Odoo bridge allow-list', () => {
         sourceQuoteId: 81,
         years: 6,
         runId,
+        retention: 'selected',
+      }),
+    ).toBe(false);
+    expect(isRenewalBridgeOperation({ name: 'cancelIntermediateRenewalQuotes', runId })).toBe(true);
+    expect(
+      isRenewalBridgeOperation({
+        name: 'cancelIntermediateRenewalQuotes',
+        runId,
+        quoteIds: [81],
       }),
     ).toBe(false);
     expect(isRenewalBridgeOperation({ name: 'finishRenewalRun', runId, quoteId: 81 })).toBe(false);
@@ -354,6 +367,24 @@ describe('Odoo bridge allow-list', () => {
       createdLineCount: 1,
     });
     expect(parseRenewalDiscountApplyResult({ createdLineCount: 0 })).toBeNull();
+    expect(
+      parseRenewalIntermediateCancellationResult({
+        cancelledQuoteIds: [82, 83],
+        alreadyCancelledQuoteIds: [84],
+      }),
+    ).toEqual({ cancelledQuoteIds: [82, 83], alreadyCancelledQuoteIds: [84] });
+    expect(
+      parseRenewalIntermediateCancellationResult({
+        cancelledQuoteIds: [83, 82],
+        alreadyCancelledQuoteIds: [],
+      }),
+    ).toBeNull();
+    expect(
+      parseRenewalIntermediateCancellationResult({
+        cancelledQuoteIds: [82],
+        alreadyCancelledQuoteIds: [82],
+      }),
+    ).toBeNull();
 
     const shareLink =
       'https://www.odoo.com/mail/view?model=sale.order&res_id=82&access_token=secret-token';
