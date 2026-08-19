@@ -18,49 +18,29 @@
       <nav aria-label="Primary"><a href="./">Overview</a><a href="support.html">Support</a></nav>
     </header>
     <main class="policy">
-      <p class="eyebrow">Effective August 5, 2026</p>
+      <p class="eyebrow">Effective August 19, 2026</p>
       <h1>Privacy policy</h1>
       <p>
-        OdooHealthExtCS is an internal browser productivity extension for authorized Odoo Customer
-        Success users. It is not an installable Odoo module and is not an official Odoo product.
+        OdooHealthExtCS is an internal browser productivity toolbox for authorized users. It is not
+        an installable Odoo module and is not an official Odoo product.
       </p>
       <h2>Data processed</h2>
       <p>
-        On every matching <code>https://www.odoo.com/odoo*</code> workspace page, the extension
-        performs a read-only same-origin session check so the control panel can report whether the
-        Odoo connection is ready. When the settings popup is opened from an active Odoo workspace
-        tab, it may also display the current Odoo user's name or login so the user can confirm which
-        account is connected. This label is sanitized, kept only in the active tab's memory, and
-        never written to browser storage. User IDs, cookies, session identifiers, and the raw
-        session response do not leave the page bridge.
-      </p>
-      <p>
-        On matching Odoo subscription pages whose visible status badge is In Progress, enabled
-        features read only the fields needed for account health and the exact linked customer's
-        industry. User-requested updates are sent back to Odoo through the browser's current
-        authenticated same-origin session. A narrow page bridge rejects unrecognized models,
-        methods, fields, searches, and write shapes before contacting Odoo.
-      </p>
-      <p>
-        Processing occurs in the browser and between the browser and <code>www.odoo.com</code>. No
-        Odoo page data is sent to the developer, analytics providers, advertising networks, or other
-        external services.
+        The extension processes only the limited workspace context needed to display enabled tools
+        and complete actions explicitly requested by the user. Workspace content is not sent to the
+        developer, analytics providers, advertising networks, or other external services.
       </p>
       <h2>Data stored</h2>
       <p>
-        Browser storage contains only enablement, feature, success-confirmation, and appearance
-        preferences plus a sanitized general connection code and timestamp. The extension does not
-        persist Odoo records, customer data, names, logins, email addresses, cookies, passwords,
-        CSRF values, user identifiers, session identifiers, credentials, request histories, or raw
-        server stack traces. The connected-user label exists only in volatile memory while the
-        matching Odoo tab remains open.
+        Browser storage contains only extension preferences and basic operating status. The
+        extension does not persist workspace records, customer content, credentials, or generated
+        links.
       </p>
       <h2>Permissions</h2>
       <p>
-        The <code>storage</code> permission saves settings and compatibility status. Both the
-        isolated interface script and page-context bridge are limited to
-        <code>https://www.odoo.com/odoo*</code>. No history, tabs, cookies, identity, downloads,
-        clipboard, camera, microphone, geolocation, or broad host permission is requested.
+        Browser permissions are limited to saving preferences, accessing the supported workspace,
+        and completing explicit shortcut actions. The extension does not request broad access to
+        unrelated browsing activity or device sensors.
       </p>
       <h2>Sharing and advertising</h2>
       <p>
@@ -69,16 +49,14 @@
       </p>
       <h2>User control and retention</h2>
       <p>
-        Users may disable features, clear extension storage, or uninstall the extension. Clearing
-        storage removes preferences and compatibility status. Requested Odoo record changes remain
-        subject to Odoo and organizational retention policies.
+        Users may disable tools, clear extension storage, or uninstall the extension. Clearing
+        storage removes preferences and compatibility status. Actions completed in the workspace
+        remain subject to the organization's normal retention policies.
       </p>
       <h2>Security and changes</h2>
       <p>
-        The project minimizes permissions, validates model contracts before writes, enforces an
-        exact RPC allow-list, sanitizes results and errors, and scans releases for prohibited
-        sensitive material. Material policy changes will be reflected on this page and in the public
-        repository.
+        The extension is designed to minimize access and data use. Material privacy changes will be
+        reflected on this page.
       </p>
       <h2>Contact</h2>
       <p>
@@ -87,10 +65,7 @@
       </p>
     </main>
     <footer class="site-footer">
-      <span>OdooHealthExtCS · © DDEM</span
-      ><a href="https://github.com/daviddemri26/OdooHealthExtCS/blob/main/PRIVACY.md"
-        >Repository policy</a
-      >
+      <span>OdooHealthExtCS · © DDEM</span><a href="./">Overview</a>
     </footer>
   </body>
 </html>
