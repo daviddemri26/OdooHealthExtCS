@@ -17,9 +17,15 @@ import type {
   RenewalShareLinkResult,
   RenewalTargetYears,
 } from './renewal-contracts';
+import type {
+  QuoteShareBridgeOperation,
+  QuoteShareEligibilityResult,
+  QuoteShareLinkResult,
+  QuoteShareTarget,
+} from './share-link-contracts';
 
 export const ODOO_BRIDGE_CHANNEL = 'odoo-health-ext-cs:rpc';
-export const ODOO_BRIDGE_VERSION = 6 as const;
+export const ODOO_BRIDGE_VERSION = 7 as const;
 export const ODOO_BRIDGE_ORIGIN = 'https://www.odoo.com';
 export const MAX_SUBSCRIPTION_LIST_BATCH = 100;
 
@@ -77,6 +83,10 @@ export type OdooBridgeRequest = OdooBridgeRequestBase &
     | {
         kind: 'customerData';
         operation: CustomerDataBridgeOperation;
+      }
+    | {
+        kind: 'quoteShare';
+        operation: QuoteShareBridgeOperation;
       }
   );
 
@@ -621,7 +631,7 @@ export function parseRenewalIntermediateCancellationResult(
   };
 }
 
-function parseRenewalShareLink(value: unknown, expectedQuoteId: number): string | null {
+export function parseQuoteShareLink(value: unknown, expectedQuoteId: number): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2_048) return null;
   let url: URL;
   try {
@@ -661,8 +671,67 @@ export function parseRenewalShareLinkResult(
   ) {
     return null;
   }
-  const shareLink = parseRenewalShareLink(value.shareLink, expectedQuoteId);
+  const shareLink = parseQuoteShareLink(value.shareLink, expectedQuoteId);
   return shareLink ? { quoteId: expectedQuoteId, shareLink } : null;
+}
+
+function isQuoteShareTarget(value: unknown): value is QuoteShareTarget {
+  return value === 'renewal_quotation' || value === 'sales_quotation';
+}
+
+function isQuoteSharePathname(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > '/odoo/'.length &&
+    value.length <= 1_024 &&
+    value.startsWith('/odoo/') &&
+    !hasControlCharacters(value)
+  );
+}
+
+export function isQuoteShareBridgeOperation(value: unknown): value is QuoteShareBridgeOperation {
+  return Boolean(
+    isRecord(value) &&
+    (value.name === 'inspectQuoteShareTarget' || value.name === 'getQuoteShareLink') &&
+    hasExactKeys(value, ['name', 'quoteId', 'target', 'pathname']) &&
+    isPositiveId(value.quoteId) &&
+    isQuoteShareTarget(value.target) &&
+    isQuoteSharePathname(value.pathname),
+  );
+}
+
+export function parseQuoteShareEligibilityResult(
+  value: unknown,
+  expectedQuoteId: number,
+  expectedTarget: QuoteShareTarget,
+): QuoteShareEligibilityResult | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['quoteId', 'target', 'eligible']) ||
+    value.quoteId !== expectedQuoteId ||
+    value.target !== expectedTarget ||
+    typeof value.eligible !== 'boolean'
+  ) {
+    return null;
+  }
+  return { quoteId: expectedQuoteId, target: expectedTarget, eligible: value.eligible };
+}
+
+export function parseQuoteShareLinkResult(
+  value: unknown,
+  expectedQuoteId: number,
+  expectedTarget: QuoteShareTarget,
+): QuoteShareLinkResult | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['quoteId', 'target', 'shareLink']) ||
+    value.quoteId !== expectedQuoteId ||
+    value.target !== expectedTarget
+  ) {
+    return null;
+  }
+  const shareLink = parseQuoteShareLink(value.shareLink, expectedQuoteId);
+  return shareLink ? { quoteId: expectedQuoteId, target: expectedTarget, shareLink } : null;
 }
 
 function parseRenewalQuoteLine(value: unknown): RenewalQuoteLineSummary | null {
@@ -927,6 +996,19 @@ export function isOdooBridgeRequest(value: unknown): value is OdooBridgeRequest 
         'kind',
         'operation',
       ]) && isRenewalBridgeOperation(value.operation)
+    );
+  }
+  if (value.kind === 'quoteShare') {
+    return (
+      hasExactKeys(value, [
+        'channel',
+        'version',
+        'direction',
+        'clientId',
+        'requestId',
+        'kind',
+        'operation',
+      ]) && isQuoteShareBridgeOperation(value.operation)
     );
   }
   return (

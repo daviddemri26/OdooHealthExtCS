@@ -46,11 +46,12 @@ import { mergeSettingsPatch, type ExtensionSettingsPatch } from '../src/shared/s
 const popupStyles = readFileSync(resolve('entrypoints/popup/style.css'), 'utf8');
 
 const settings = {
-  schemaVersion: 4 as const,
+  schemaVersion: 5 as const,
   enabled: true,
   healthListPreview: true,
-  features: { health: true, industry: true, renewals: false },
-  successToasts: { health: true, industry: true, renewals: true },
+  features: { health: true, industry: true, renewals: false, shareLinks: false },
+  successToasts: { health: true, industry: true, renewals: true, shareLinks: true },
+  shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
   renewalDefaults: {
     discountTenthsByYears: { 1: 0, 2: 30, 3: 60, 4: 80, 5: 100 },
   },
@@ -180,6 +181,7 @@ describe('settings popup', () => {
     const healthNavigation = screen.getByRole('button', { name: /Account Health Enabled/ });
     const industryNavigation = screen.getByRole('button', { name: /Industry Enabled/ });
     expect(screen.getByRole('button', { name: /Renewals Disabled/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Share Links Disabled/ })).toBeInTheDocument();
 
     fireEvent.click(settingsNavigation);
     expect(screen.getByRole('article', { name: 'Appearance settings' })).toBeInTheDocument();
@@ -215,6 +217,40 @@ describe('settings popup', () => {
     expect(
       screen.queryByText('Feature preferences on this page are saved automatically.'),
     ).not.toBeInTheDocument();
+  });
+
+  it('enables Share Links with both targets and the optional confirmation selected', async () => {
+    storedSettings = {
+      ...storedSettings,
+      successToasts: { ...storedSettings.successToasts, shareLinks: false },
+      shareLinkTargets: { renewalQuotations: false, salesQuotations: false },
+    };
+    render(<Popup />);
+    await screen.findByText('Connected and ready');
+    fireEvent.click(screen.getByRole('button', { name: /Share Links Disabled/ }));
+
+    const enable = screen.getByRole('checkbox', { name: 'Enable Share Links' });
+    expect(enable).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Show success confirmation' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Renewal Quotations' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Sales Quotations' })).toBeDisabled();
+
+    fireEvent.click(enable);
+    await waitFor(() =>
+      expect(mocks.patchSettings).toHaveBeenCalledWith({
+        features: { shareLinks: true },
+        successToasts: { shareLinks: true },
+        shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
+      }),
+    );
+    expect(screen.getByRole('checkbox', { name: 'Show success confirmation' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Renewal Quotations' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Sales Quotations' })).toBeChecked();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sales Quotations' }));
+    expect(mocks.patchSettings).toHaveBeenLastCalledWith({
+      shareLinkTargets: { salesQuotations: false },
+    });
   });
 
   it('configures renewal defaults on a dedicated auto-saved feature page', async () => {

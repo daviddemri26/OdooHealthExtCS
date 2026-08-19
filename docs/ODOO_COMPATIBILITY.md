@@ -13,17 +13,20 @@ The extension relies on stable model semantics rather than copied DOM values:
 - `sale.order.subscription_state` exposes `3_progress` and `4_paused` for the closed Health and Industry mutation checks. Renewals require `3_progress`.
 - `sale.order.plan_id` points to a recurring plan whose technical billing-period value and unit determine renewal eligibility.
 - native subscription Renew, bound Copy actions, the sale-order Global Discount wizard, and the Share wizard retain the reviewed Odoo 19 contracts used by Renewals.
+- `portal.share.default_get(["share_link"])` retains the reviewed current-quotation context used by the one-click Share shortcut.
 - authenticated JSON-RPC model calls remain available at `/web/dataset/call_kw` from the Odoo page's `MAIN` execution world.
 
-The isolated UI never calls Odoo directly. A versioned page bridge accepts only the exact read contracts and closed Health, Industry, and Renewals operations documented in [ARCHITECTURE.md](ARCHITECTURE.md), validates them before fetch, and sanitizes results before returning them. Compatibility also requires Chrome and Firefox to preserve Manifest V3 `MAIN`-world content-script support.
+The isolated UI never calls Odoo directly. A versioned page bridge accepts only the exact read contracts and closed Health, Industry, Renewals, and Share Links operations documented in [ARCHITECTURE.md](ARCHITECTURE.md), validates them before fetch, and sanitizes results before returning them. Compatibility also requires Chrome and Firefox to preserve Manifest V3 `MAIN`-world content-script support.
 
-The route and form checks use several signals so minor web-client layout changes do not automatically enable mutations on the wrong model. Health and Industry each accept only one unambiguous English **In Progress** or **Paused** badge. Renewals uses its own server-side technical-state check and remains unavailable on Paused. The list preview is read-only and requires the complete documented list-controller and technical-field signature instead of relying on URL text or column position.
+The route and form checks use several signals so minor web-client layout changes do not automatically enable operations on the wrong model. Health and Industry each accept only one unambiguous English **In Progress** or **Paused** badge. Renewals uses its own server-side technical-state check and remains unavailable on Paused. Share Links requires an exact Sales or Subscriptions route ending in a rendered `sale.order`, then verifies draft/sent state and—under Subscriptions—the technical renewal state. The list preview is read-only and requires the complete documented list-controller and technical-field signature instead of relying on URL text or column position.
 
 ## Future Odoo 19.x releases
 
 For each 19.x release, run the complete QA checklist in both browsers. Confirm the bridge handshake, exact request and operation allow-list, direct and nested subscription routes, separate In Progress/Paused form policies, list-view structural signature, reordered columns, grouped rows, pagination and filters, field metadata, canonical tags, concurrent-tag preservation, linked-partner revalidation, signed nonzero partner-ID preservation, positive industry IDs, permission behavior, light/dark rendering, and SPA navigation. Confirm separately that Account Health loads from `tag_ids` alone.
 
 For Renewals, confirm the technical plan interval/unit fields, exact server state, native Renew return, only the required bound Copy actions, template and line transformations, the native global-discount marker and wizard schema, Share-link shape, lineage, total verification, and run cleanup. The Copy labels are resolved under the reviewed English Odoo context and all loaded actions must retain the expected `sale.order` server-action metadata. If a DOM anchor changes but the model contract is intact, update the anchor selector without widening route or feature eligibility.
+
+For Share Links, confirm direct and nested Sales and Subscriptions routes, nested technical `sale.order` renewal routes, the last-active-model check, draft and sent quotations, rejected nonquotation states, exact `2_renewal` filtering under Subscriptions and technical routes, native Share-link shape, no email side effect, clipboard write behavior, SPA invalidation, and both independent target settings.
 
 ## Odoo 20
 

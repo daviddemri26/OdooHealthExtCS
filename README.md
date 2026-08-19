@@ -1,14 +1,15 @@
 # OdooHealthExtCS
 
-OdooHealthExtCS is the internal browser extension for the Odoo Customer Success team in San Francisco. It adds focused, production-ready subscription shortcuts and read-only list context without installing an Odoo module or changing the Odoo server.
+OdooHealthExtCS is the internal browser extension for the Odoo Customer Success team in San Francisco. It adds focused, production-ready subscription and quotation shortcuts plus read-only list context without installing an Odoo module or adding server code.
 
-The extension runs only on `https://www.odoo.com/odoo*`, shows its interactive record controls only when the visible subscription badge is **In Progress**, uses the user's existing authenticated session, and sends no Odoo data to external services.
+The extension runs only on `https://www.odoo.com/odoo*`, applies a separate structural and server-side eligibility policy to each feature, uses the user's existing authenticated session, and sends no Odoo data to external services.
 
 ## Features
 
 - Account health: read, set, replace, or clear the canonical `Health - High`, `Health - Medium`, and `Health - Low` tags while preserving unrelated tags.
 - Subscription-list preview: optionally show a compact health-color indicator beside each visible customer in structurally recognized Odoo subscription lists.
 - Industry quick picker: search and update the exact subscription customer's industry without leaving the subscription.
+- Share Links: optionally copy Odoo's native Share URL in one click from eligible Renewal Quotations and Sales quotations, including Success Packs.
 - Safe feedback: optimistic updates, light/dark status messages, optional success confirmations, and a seven-second Undo action that refuses to overwrite a later external change.
 - Personal settings: master, feature, independent list-preview, per-feature success-confirmation, and appearance controls stored by the browser.
 
@@ -42,7 +43,7 @@ pnpm test
 pnpm validate
 ```
 
-WXT, React, and TypeScript provide one Manifest V3 codebase for Chrome/Chromium and Firefox. Interactive UI runs in an isolated content script and lives in a Shadow DOM; the read-only list preview decorates only structurally verified native Customer cells with namespaced elements. A second, narrowly allow-listed `MAIN`-world bridge performs authenticated same-origin calls to `/web/dataset/call_kw`; it exposes no general-purpose RPC access. The project contains no password, API key, cookie reader, analytics client, or remotely hosted executable code.
+WXT, React, and TypeScript provide one Manifest V3 codebase for Chrome/Chromium and Firefox. Interactive UI runs in an isolated content script and lives in a Shadow DOM; the read-only list preview decorates only structurally verified native Customer cells with namespaced elements. A second, narrowly allow-listed `MAIN`-world bridge performs authenticated same-origin calls to `/web/dataset/call_kw`; it exposes no general-purpose RPC access. The `clipboardWrite` permission supports explicit copy actions only; the extension never reads the clipboard. The project contains no password, API key, cookie reader, analytics client, or remotely hosted executable code.
 
 See [Architecture](docs/ARCHITECTURE.md), [Odoo compatibility](docs/ODOO_COMPATIBILITY.md), and [Troubleshooting](docs/TROUBLESHOOTING.md).
 

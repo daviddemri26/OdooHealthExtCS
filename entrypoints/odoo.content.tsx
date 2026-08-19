@@ -16,8 +16,11 @@ import {
 } from '../src/features/renewals/native-host';
 import { RenewalQuoteSmartButtonManager } from '../src/features/renewals/smart-button';
 import { RenewalPopover } from '../src/features/renewals/RenewalPopover';
+import { QuoteShareControl } from '../src/features/share-links/QuoteShareControl';
 import {
+  getRenderedQuoteShareRoute,
   getRenderedSubscriptionRoute,
+  isExactQuoteShareRoute,
   isExactSubscriptionRoute,
   parseSubscriptionRoute,
 } from '../src/odoo/routes';
@@ -30,6 +33,7 @@ import {
 } from '../src/shared/live-connection';
 import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from '../src/shared/settings';
 import type { ConnectionCode, ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
+import type { QuoteShareRoute } from '../src/odoo/share-link-contracts';
 
 const ROOT_ID = 'odoo-health-ext-cs-root';
 const RENEWAL_BUTTON_ROOT_ID = `${ROOT_ID}-renewal-button`;
@@ -74,6 +78,16 @@ function getActiveRoute(): SubscriptionRoute | null {
   return getRenderedSubscriptionRoute(window.location);
 }
 
+function getActiveQuoteShareRoute(): QuoteShareRoute | null {
+  return getRenderedQuoteShareRoute(window.location);
+}
+
+function isQuoteShareTargetEnabled(settings: ExtensionSettings, route: QuoteShareRoute): boolean {
+  return route.target === 'renewal_quotation'
+    ? settings.shareLinkTargets.renewalQuotations
+    : settings.shareLinkTargets.salesQuotations;
+}
+
 export default defineContentScript({
   matches: ['https://www.odoo.com/odoo*'],
   runAt: 'document_idle',
@@ -97,6 +111,14 @@ export default defineContentScript({
       },
     });
     const renewalQuoteSmartButton = new RenewalQuoteSmartButtonManager();
+    const isCurrentSubscriptionRoute = (candidate: SubscriptionRoute): boolean =>
+      isExactSubscriptionRoute(
+        parseSubscriptionRoute(window.location),
+        candidate.recordId,
+        candidate.pathname,
+      );
+    const isCurrentQuoteShareRoute = (candidate: QuoteShareRoute): boolean =>
+      isExactQuoteShareRoute(getRenderedQuoteShareRoute(window.location), candidate);
 
     const root: Root = createRoot(container);
     let settings: ExtensionSettings = DEFAULT_SETTINGS;
@@ -156,12 +178,21 @@ export default defineContentScript({
 
     const render = (): void => {
       const route = getActiveRoute();
+      const quoteShareRoute = getActiveQuoteShareRoute();
       const healthEligible = Boolean(route && isHealthEligibleSubscription());
       const industryEligible = Boolean(route && isIndustryEligibleSubscription());
       const customerDataRoute = route && (healthEligible || industryEligible) ? route : null;
       const configuredRenewals = Boolean(
         route && settingsReady && settings.enabled && settings.features.renewals,
       );
+      const configuredQuoteShareRoute =
+        quoteShareRoute &&
+        settingsReady &&
+        settings.enabled &&
+        settings.features.shareLinks &&
+        isQuoteShareTargetEnabled(settings, quoteShareRoute)
+          ? quoteShareRoute
+          : null;
       const currentRenewal = renewalController.getSnapshot();
       const renewalRunInFlight =
         currentRenewal.phase === 'preflight' || currentRenewal.phase === 'running';
@@ -210,20 +241,15 @@ export default defineContentScript({
         visibleRenewalQuoteCount: renewalSnapshot.visibleRenewalQuoteCount,
       });
       void listHealthPreview.sync(settingsReady && settings.enabled && settings.healthListPreview);
-      if (customerDataRoute) attachPanelHost(panelHost);
+      if (customerDataRoute || configuredQuoteShareRoute) attachPanelHost(panelHost);
       else panelHost.style.display = 'none';
+      const theme = settings.appearance === 'auto' ? detectOdooTheme() : settings.appearance;
       root.render(
         <>
           <ContentApp
             gateway={gateway}
             route={customerDataRoute}
-            isRouteCurrent={(candidate) =>
-              isExactSubscriptionRoute(
-                parseSubscriptionRoute(window.location),
-                candidate.recordId,
-                candidate.pathname,
-              )
-            }
+            isRouteCurrent={isCurrentSubscriptionRoute}
             healthEligible={healthEligible}
             industryEligible={industryEligible}
             settings={settings}
@@ -232,11 +258,23 @@ export default defineContentScript({
             panelContainer={panelContainer}
             statusStore={statusStore}
           />
+          {configuredQuoteShareRoute ? (
+            <QuoteShareControl
+              gateway={gateway}
+              route={configuredQuoteShareRoute}
+              isRouteCurrent={isCurrentQuoteShareRoute}
+              settings={settings}
+              theme={theme}
+              anchor={measureOrderDateAnchor()}
+              panelContainer={panelContainer}
+              statusStore={statusStore}
+            />
+          ) : null}
           {renewalHost && renewalBelongsToRoute ? (
             <RenewalPopover
               controller={renewalController}
               caretContainer={renewalHost.container}
-              theme={settings.appearance === 'auto' ? detectOdooTheme() : settings.appearance}
+              theme={theme}
               routeKey={`${route?.recordId ?? 'none'}:${route?.pathname ?? ''}`}
             />
           ) : null}

@@ -22,13 +22,13 @@ import type {
   RenewalYear,
 } from '../../src/shared/types';
 
-type PanelId = 'connection' | 'settings' | 'health' | 'industry' | 'renewals';
+type PanelId = 'connection' | 'settings' | 'health' | 'industry' | 'renewals' | 'shareLinks';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 interface NavigationItem {
   id: PanelId;
   label: string;
-  icon: 'connection' | 'settings' | 'health' | 'industry' | 'renewals';
+  icon: 'connection' | 'settings' | 'health' | 'industry' | 'renewals' | 'shareLinks';
 }
 
 const NAVIGATION_ITEMS: NavigationItem[] = [
@@ -57,6 +57,11 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
     label: 'Renewals',
     icon: 'renewals',
   },
+  {
+    id: 'shareLinks',
+    label: 'Share Links',
+    icon: 'shareLinks',
+  },
 ];
 
 const RENEWAL_DISCOUNT_SETTING_YEARS = [2, 3, 4, 5] as const satisfies readonly RenewalYear[];
@@ -82,6 +87,17 @@ function PanelIcon({ icon }: { icon: NavigationItem['icon'] }): React.JSX.Elemen
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M20 8V4h-4M20 4l-4.5 4.5A7 7 0 1 0 19 15" />
+      </svg>
+    );
+  }
+
+  if (icon === 'shareLinks') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="18" cy="5" r="2.5" />
+        <circle cx="6" cy="12" r="2.5" />
+        <circle cx="18" cy="19" r="2.5" />
+        <path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5" />
       </svg>
     );
   }
@@ -586,6 +602,85 @@ function RenewalsPanel({
   );
 }
 
+function ShareLinksPanel({
+  settings,
+  onEnabledChange,
+  onSuccessToastChange,
+  onTargetChange,
+}: {
+  settings: ExtensionSettings;
+  onEnabledChange: (checked: boolean) => void;
+  onSuccessToastChange: (checked: boolean) => void;
+  onTargetChange: (target: keyof ExtensionSettings['shareLinkTargets'], checked: boolean) => void;
+}): React.JSX.Element {
+  const enabled = settings.features.shareLinks;
+  const controlsDisabled = !settings.enabled || !enabled;
+
+  return (
+    <div className="page" data-panel="shareLinks">
+      <section className="feature-overview" aria-label="Share Links overview">
+        <p>
+          Copy Odoo’s native customer Share link from an eligible quotation in one click, without
+          opening the Share dialog or sending a message.
+        </p>
+      </section>
+
+      {!settings.enabled ? (
+        <div className="inline-notice" role="status">
+          Enable the extension from the top-right switch to use this feature.
+        </div>
+      ) : null}
+
+      <section className="options-card" aria-label="Share Links settings">
+        <Switch
+          checked={enabled}
+          disabled={!settings.enabled}
+          label="Enable Share Links"
+          description="Show a compact Copy Share Link button at the top of eligible quotations."
+          onChange={onEnabledChange}
+        />
+        <Switch
+          checked={settings.successToasts.shareLinks}
+          disabled={controlsDisabled}
+          label="Show success confirmation"
+          description="Display a short confirmation after the Share link is copied."
+          onChange={onSuccessToastChange}
+        />
+      </section>
+
+      <section className="options-card standalone-option-card" aria-label="Share Link targets">
+        <Switch
+          checked={settings.shareLinkTargets.renewalQuotations}
+          disabled={controlsDisabled}
+          label="Renewal Quotations"
+          description="Show the shortcut on draft or sent quotations that Odoo confirms as renewals."
+          onChange={(checked) => onTargetChange('renewalQuotations', checked)}
+        />
+        <Switch
+          checked={settings.shareLinkTargets.salesQuotations}
+          disabled={controlsDisabled}
+          label="Sales Quotations"
+          description="Show the shortcut on every draft or sent Sales quotation, including Success Packs."
+          onChange={(checked) => onTargetChange('salesQuotations', checked)}
+        />
+      </section>
+
+      <section className="save-explanation" aria-label="How Share Links work">
+        <span className="save-explanation-mark" aria-hidden="true">
+          ✓
+        </span>
+        <div>
+          <h3>Uses Odoo’s native Share link</h3>
+          <p>
+            The shortcut creates or reuses the same access link as Odoo’s Share dialog, copies it
+            only after your click, and never sends an email or reads your clipboard.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function RenewalDiscountInput({
   year,
   discountTenths,
@@ -913,6 +1008,26 @@ export function Popup(): React.JSX.Element {
                 onEnabledChange={(checked) => updateFeature('renewals', checked)}
                 onSuccessToastChange={(checked) => updateSuccessToast('renewals', checked)}
                 onDiscountChange={updateRenewalDiscount}
+              />
+            ) : activePanel === 'shareLinks' ? (
+              <ShareLinksPanel
+                settings={settings}
+                onEnabledChange={(checked) =>
+                  checked
+                    ? commitSettingsPatch({
+                        features: { shareLinks: true },
+                        successToasts: { shareLinks: true },
+                        shareLinkTargets: {
+                          renewalQuotations: true,
+                          salesQuotations: true,
+                        },
+                      })
+                    : updateFeature('shareLinks', false)
+                }
+                onSuccessToastChange={(checked) => updateSuccessToast('shareLinks', checked)}
+                onTargetChange={(target, checked) =>
+                  commitSettingsPatch({ shareLinkTargets: { [target]: checked } })
+                }
               />
             ) : (
               <FeaturePanel

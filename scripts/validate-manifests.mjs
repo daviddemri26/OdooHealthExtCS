@@ -7,6 +7,7 @@ const targets = [
   { browser: 'firefox', directory: '.output/firefox-mv3' },
 ];
 const expectedMatch = 'https://www.odoo.com/odoo*';
+const expectedPermissions = ['clipboardWrite', 'storage'];
 const releaseState = JSON.parse(
   await readFile(path.join(projectRoot, 'store/release-state.json'), 'utf8'),
 );
@@ -23,9 +24,8 @@ for (const target of targets) {
   assert(manifest.background === undefined, `${target.browser}: no background process is allowed.`);
   assert(
     Array.isArray(manifest.permissions) &&
-      manifest.permissions.length === 1 &&
-      manifest.permissions[0] === 'storage',
-    `${target.browser}: storage must be the only API permission.`,
+      JSON.stringify([...manifest.permissions].sort()) === JSON.stringify(expectedPermissions),
+    `${target.browser}: only storage and clipboardWrite API permissions are allowed.`,
   );
   assert(
     manifest.host_permissions === undefined || manifest.host_permissions.length === 0,

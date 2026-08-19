@@ -83,7 +83,12 @@ describe('settings storage patches', () => {
     releaseFirstWrite();
     const [, latest] = await Promise.all([healthPatch, industryPatch]);
 
-    expect(latest.features).toEqual({ health: false, industry: false, renewals: false });
+    expect(latest.features).toEqual({
+      health: false,
+      industry: false,
+      renewals: false,
+      shareLinks: false,
+    });
     expect(latest.appearance).toBe('light');
     expect(storage.get).toHaveBeenCalledTimes(2);
   });
@@ -149,12 +154,39 @@ describe('settings storage patches', () => {
     await Promise.all([healthPatch, industryPatch]);
 
     const hydrated = await getSettings();
-    expect(hydrated.features).toEqual({ health: false, industry: false, renewals: false });
+    expect(hydrated.features).toEqual({
+      health: false,
+      industry: false,
+      renewals: false,
+      shareLinks: false,
+    });
     expect(
       storage.set.mock.calls.every((call) => {
         const value = call[0] as Record<string, unknown>;
         return value[SETTINGS_STORAGE_KEY] === undefined;
       }),
     ).toBe(true);
+  });
+
+  it('migrates V4 field-scoped preferences while defaulting Share Links off', async () => {
+    storage.get.mockResolvedValue({
+      'odooHealthExtCsSettingsV4:features.health': false,
+      'odooHealthExtCsSettingsV4:successToasts.industry': false,
+      'odooHealthExtCsSettingsV4:appearance': 'light',
+    });
+    storage.set.mockResolvedValue(undefined);
+
+    const hydrated = await getSettings();
+
+    expect(hydrated).toMatchObject({
+      schemaVersion: 5,
+      appearance: 'light',
+      features: { health: false, shareLinks: false },
+      successToasts: { industry: false, shareLinks: true },
+      shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
+    });
+    expect(storage.set).toHaveBeenCalledWith({
+      [SETTINGS_STORAGE_KEY]: hydrated,
+    });
   });
 });

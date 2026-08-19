@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in Share Links shortcut that copies Odoo's native Share URL in one click from server-confirmed Renewal Quotations and Sales quotations, including Success Packs.
+- Added independent Renewal Quotation, Sales quotation, and success-confirmation settings; the feature defaults to disabled and selects both targets when first enabled.
+- Recognized Odoo's nested technical `/odoo/sale.order/...` routes as renewal candidates while retaining the exact server-side renewal-state requirement.
+
+### Security
+
+- Bound Share operations to the exact current `sale.order` route and server state, accepted only validated same-origin tokenized Odoo URLs, kept links out of storage and notification content, and added write-only clipboard access without clipboard reads.
+
 ## [2.0.0] - 2026-08-15
 
 ### Added

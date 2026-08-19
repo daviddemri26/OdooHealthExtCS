@@ -1,4 +1,5 @@
 import type { SubscriptionRoute } from '../shared/types';
+import type { QuoteShareRoute, QuoteShareTarget } from './share-link-contracts';
 
 const ODOO_HOST = 'www.odoo.com';
 const ODOO_PATH_PREFIX = '/odoo';
@@ -6,6 +7,24 @@ const ODOO_PATH_PREFIX = '/odoo';
 interface RouteCandidate {
   model: string;
   recordId: number;
+}
+
+function routeCandidates(pathname: string, includeSalesAlias = false): RouteCandidate[] {
+  const segments = pathname.split('/').filter(Boolean);
+  const candidates: RouteCandidate[] = [];
+
+  for (let index = 1; index < segments.length - 1; index += 1) {
+    const token = segments[index];
+    const recordId = Number(segments[index + 1]);
+    if (!token || !Number.isSafeInteger(recordId) || recordId <= 0) continue;
+
+    if (token === 'subscriptions' || (includeSalesAlias && token === 'sales')) {
+      candidates.push({ model: 'sale.order', recordId });
+    } else if (token.includes('.')) {
+      candidates.push({ model: token, recordId });
+    }
+  }
+  return candidates;
 }
 
 export function isAllowedOdooLocation(location: Pick<Location, 'hostname' | 'pathname'>): boolean {
@@ -17,21 +36,7 @@ export function parseSubscriptionRoute(
 ): SubscriptionRoute | null {
   if (!isAllowedOdooLocation(location)) return null;
 
-  const segments = location.pathname.split('/').filter(Boolean);
-  const candidates: RouteCandidate[] = [];
-
-  for (let index = 1; index < segments.length - 1; index += 1) {
-    const token = segments[index];
-    const recordId = Number(segments[index + 1]);
-    if (!token || !Number.isSafeInteger(recordId) || recordId <= 0) continue;
-
-    if (token === 'subscriptions') {
-      candidates.push({ model: 'sale.order', recordId });
-    } else if (token.includes('.')) {
-      candidates.push({ model: token, recordId });
-    }
-  }
-
+  const candidates = routeCandidates(location.pathname);
   const active = candidates.at(-1);
   if (!active || active.model !== 'sale.order') return null;
 
@@ -40,6 +45,51 @@ export function parseSubscriptionRoute(
     recordId: active.recordId,
     pathname: location.pathname,
   };
+}
+
+export function parseQuoteShareRoutePathname(pathname: string): QuoteShareRoute | null {
+  if (!pathname.startsWith(`${ODOO_PATH_PREFIX}/`) || pathname.length > 1_024) return null;
+  const segments = pathname.split('/').filter(Boolean);
+  const rootSection = segments[1];
+  const target: QuoteShareTarget | null =
+    rootSection === 'subscriptions' || rootSection === 'sale.order'
+      ? 'renewal_quotation'
+      : rootSection === 'sales'
+        ? 'sales_quotation'
+        : null;
+  if (!target) return null;
+
+  const active = routeCandidates(pathname, true).at(-1);
+  if (!active || active.model !== 'sale.order') return null;
+  return {
+    model: 'sale.order',
+    recordId: active.recordId,
+    pathname,
+    target,
+  };
+}
+
+export function getRenderedQuoteShareRoute(
+  location: Pick<Location, 'hostname' | 'pathname'>,
+  root: ParentNode = document,
+): QuoteShareRoute | null {
+  if (!isAllowedOdooLocation(location)) return null;
+  const route = parseQuoteShareRoutePathname(location.pathname);
+  const form = root.querySelector('.o_form_view');
+  if (!route || !form?.querySelector('[name="partner_id"]')) return null;
+  return route;
+}
+
+export function isExactQuoteShareRoute(
+  route: QuoteShareRoute | null,
+  expected: QuoteShareRoute,
+): boolean {
+  return Boolean(
+    route &&
+    route.recordId === expected.recordId &&
+    route.pathname === expected.pathname &&
+    route.target === expected.target,
+  );
 }
 
 export function isRenderedSubscriptionForm(pathname: string, root: ParentNode = document): boolean {

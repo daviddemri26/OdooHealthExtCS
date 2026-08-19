@@ -7,18 +7,24 @@ export type RenewalYear = 1 | 2 | 3 | 4 | 5;
 export type RenewalDiscountTenthsByYears = Record<RenewalYear, number>;
 
 export interface ExtensionSettings {
-  schemaVersion: 4;
+  schemaVersion: 5;
   enabled: boolean;
   healthListPreview: boolean;
   features: {
     health: boolean;
     industry: boolean;
     renewals: boolean;
+    shareLinks: boolean;
   };
   successToasts: {
     health: boolean;
     industry: boolean;
     renewals: boolean;
+    shareLinks: boolean;
+  };
+  shareLinkTargets: {
+    renewalQuotations: boolean;
+    salesQuotations: boolean;
   };
   renewalDefaults: {
     discountTenthsByYears: RenewalDiscountTenthsByYears;

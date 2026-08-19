@@ -7,11 +7,12 @@ import type { ExtensionSettings, SubscriptionRoute } from '../src/shared/types';
 import { MockGateway } from './helpers/mock-gateway';
 
 const settings: ExtensionSettings = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   enabled: true,
   healthListPreview: false,
-  features: { health: false, industry: false, renewals: true },
-  successToasts: { health: true, industry: true, renewals: true },
+  features: { health: false, industry: false, renewals: true, shareLinks: false },
+  successToasts: { health: true, industry: true, renewals: true, shareLinks: true },
+  shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
   renewalDefaults: { discountTenthsByYears: { 1: 0, 2: 30, 3: 60, 4: 80, 5: 100 } },
   appearance: 'dark',
 };

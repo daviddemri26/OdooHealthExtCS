@@ -116,6 +116,18 @@ async function waitForCustomerData(
   throw new Error(`Expected ${count} customer-data bridge requests.`);
 }
 
+async function waitForQuoteShares(
+  window: FakeBridgeWindow,
+  count: number,
+): Promise<OdooBridgeRequest[]> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const requests = window.posted.filter((request) => request.kind === 'quoteShare');
+    if (requests.length === count) return requests;
+    await Promise.resolve();
+  }
+  throw new Error(`Expected ${count} quote-share bridge requests.`);
+}
+
 describe('page-context Odoo gateway', () => {
   it('does not expose the retired generic write authority', () => {
     const gateway = new PageContextOdooGateway(new FakeBridgeWindow());
@@ -234,6 +246,51 @@ describe('page-context Odoo gateway', () => {
       state: 'low',
     });
     expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('sends Share work through an exact closed operation envelope', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.getQuoteShareLink(8_170_012, 'sales_quotation', '/odoo/sales/8170012');
+    const [request] = await waitForQuoteShares(bridgeWindow, 1);
+    expect(request).toMatchObject({
+      kind: 'quoteShare',
+      operation: {
+        name: 'getQuoteShareLink',
+        quoteId: 8_170_012,
+        target: 'sales_quotation',
+        pathname: '/odoo/sales/8170012',
+      },
+    });
+    bridgeWindow.respond(request!, {
+      quoteId: 8_170_012,
+      target: 'sales_quotation',
+      shareLink:
+        'https://www.odoo.com/mail/view?model=sale.order&res_id=8170012&access_token=secret',
+    });
+
+    await expect(pending).resolves.toMatchObject({ quoteId: 8_170_012 });
+    expect(bridgeWindow.posted.some((posted) => posted.kind === 'call')).toBe(false);
+    gateway.dispose();
+  });
+
+  it('rejects malformed or foreign Share links returned by the bridge', async () => {
+    const bridgeWindow = new FakeBridgeWindow();
+    enablePing(bridgeWindow);
+    const gateway = new PageContextOdooGateway(bridgeWindow);
+
+    const pending = gateway.getQuoteShareLink(42, 'sales_quotation', '/odoo/sales/42');
+    const [request] = await waitForQuoteShares(bridgeWindow, 1);
+    bridgeWindow.respond(request!, {
+      quoteId: 42,
+      target: 'sales_quotation',
+      shareLink: 'https://example.com/mail/view?model=sale.order&res_id=42&access_token=secret',
+    });
+
+    await expect(pending).rejects.toMatchObject({ code: 'incompatible_response' });
     gateway.dispose();
   });
 

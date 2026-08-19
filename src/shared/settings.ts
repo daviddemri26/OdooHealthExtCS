@@ -7,8 +7,9 @@ import type {
   RenewalYear,
 } from './types';
 
-export const SETTINGS_STORAGE_KEY = 'odooHealthExtCsSettingsV4';
+export const SETTINGS_STORAGE_KEY = 'odooHealthExtCsSettingsV5';
 const LEGACY_SETTINGS_STORAGE_KEYS = [
+  'odooHealthExtCsSettingsV4',
   'odooHealthExtCsSettingsV3',
   'odooHealthExtCsSettingsV2',
   'odooHealthExtCsSettingsV1',
@@ -21,11 +22,17 @@ const SETTINGS_FIELD_STORAGE_KEYS = {
     health: `${SETTINGS_STORAGE_KEY}:features.health`,
     industry: `${SETTINGS_STORAGE_KEY}:features.industry`,
     renewals: `${SETTINGS_STORAGE_KEY}:features.renewals`,
+    shareLinks: `${SETTINGS_STORAGE_KEY}:features.shareLinks`,
   },
   successToasts: {
     health: `${SETTINGS_STORAGE_KEY}:successToasts.health`,
     industry: `${SETTINGS_STORAGE_KEY}:successToasts.industry`,
     renewals: `${SETTINGS_STORAGE_KEY}:successToasts.renewals`,
+    shareLinks: `${SETTINGS_STORAGE_KEY}:successToasts.shareLinks`,
+  },
+  shareLinkTargets: {
+    renewalQuotations: `${SETTINGS_STORAGE_KEY}:shareLinkTargets.renewalQuotations`,
+    salesQuotations: `${SETTINGS_STORAGE_KEY}:shareLinkTargets.salesQuotations`,
   },
   renewalDiscounts: {
     1: `${SETTINGS_STORAGE_KEY}:renewalDefaults.discountTenthsByYears.1`,
@@ -42,14 +49,20 @@ const SETTINGS_FIELD_KEYS = [
   SETTINGS_FIELD_STORAGE_KEYS.healthListPreview,
   ...Object.values(SETTINGS_FIELD_STORAGE_KEYS.features),
   ...Object.values(SETTINGS_FIELD_STORAGE_KEYS.successToasts),
+  ...Object.values(SETTINGS_FIELD_STORAGE_KEYS.shareLinkTargets),
   ...Object.values(SETTINGS_FIELD_STORAGE_KEYS.renewalDiscounts),
   SETTINGS_FIELD_STORAGE_KEYS.appearance,
 ] as const;
+
+const LEGACY_V4_FIELD_STORAGE_KEYS = SETTINGS_FIELD_KEYS.map((key) =>
+  key.replace('odooHealthExtCsSettingsV5', 'odooHealthExtCsSettingsV4'),
+);
 
 const ALL_SETTINGS_STORAGE_KEYS = [
   SETTINGS_STORAGE_KEY,
   ...LEGACY_SETTINGS_STORAGE_KEYS,
   ...SETTINGS_FIELD_KEYS,
+  ...LEGACY_V4_FIELD_STORAGE_KEYS,
 ] as const;
 
 export const RENEWAL_YEARS: readonly RenewalYear[] = [1, 2, 3, 4, 5];
@@ -63,18 +76,24 @@ const DEFAULT_RENEWAL_DISCOUNTS: RenewalDiscountTenthsByYears = {
 };
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   enabled: true,
   healthListPreview: false,
   features: {
     health: true,
     industry: true,
     renewals: false,
+    shareLinks: false,
   },
   successToasts: {
     health: true,
     industry: true,
     renewals: true,
+    shareLinks: true,
+  },
+  shareLinkTargets: {
+    renewalQuotations: true,
+    salesQuotations: true,
   },
   renewalDefaults: {
     discountTenthsByYears: DEFAULT_RENEWAL_DISCOUNTS,
@@ -159,6 +178,11 @@ function applyStoredFieldOverrides(
         SETTINGS_FIELD_STORAGE_KEYS.features.renewals,
         base.features.renewals,
       ),
+      shareLinks: storedValueOrFallback(
+        stored,
+        SETTINGS_FIELD_STORAGE_KEYS.features.shareLinks,
+        base.features.shareLinks,
+      ),
     },
     successToasts: {
       health: storedValueOrFallback(
@@ -175,6 +199,23 @@ function applyStoredFieldOverrides(
         stored,
         SETTINGS_FIELD_STORAGE_KEYS.successToasts.renewals,
         base.successToasts.renewals,
+      ),
+      shareLinks: storedValueOrFallback(
+        stored,
+        SETTINGS_FIELD_STORAGE_KEYS.successToasts.shareLinks,
+        base.successToasts.shareLinks,
+      ),
+    },
+    shareLinkTargets: {
+      renewalQuotations: storedValueOrFallback(
+        stored,
+        SETTINGS_FIELD_STORAGE_KEYS.shareLinkTargets.renewalQuotations,
+        base.shareLinkTargets.renewalQuotations,
+      ),
+      salesQuotations: storedValueOrFallback(
+        stored,
+        SETTINGS_FIELD_STORAGE_KEYS.shareLinkTargets.salesQuotations,
+        base.shareLinkTargets.salesQuotations,
       ),
     },
     renewalDefaults: {
@@ -202,6 +243,7 @@ export interface ExtensionSettingsPatch {
   healthListPreview?: boolean;
   features?: Partial<ExtensionSettings['features']>;
   successToasts?: Partial<ExtensionSettings['successToasts']>;
+  shareLinkTargets?: Partial<ExtensionSettings['shareLinkTargets']>;
   renewalDefaults?: {
     discountTenthsByYears?: Partial<Record<RenewalYear, number>>;
   };
@@ -227,6 +269,10 @@ export function mergeSettingsPatch(
       ...current.successToasts,
       ...patch.successToasts,
     },
+    shareLinkTargets: {
+      ...current.shareLinkTargets,
+      ...patch.shareLinkTargets,
+    },
     renewalDefaults: {
       ...current.renewalDefaults,
       ...patch.renewalDefaults,
@@ -243,10 +289,11 @@ export function normalizeSettings(value: unknown): ExtensionSettings {
 
   const features = isRecord(value.features) ? value.features : {};
   const successToasts = isRecord(value.successToasts) ? value.successToasts : {};
+  const shareLinkTargets = isRecord(value.shareLinkTargets) ? value.shareLinkTargets : {};
   const renewalDefaults = isRecord(value.renewalDefaults) ? value.renewalDefaults : {};
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     enabled: booleanOrDefault(value.enabled, DEFAULT_SETTINGS.enabled),
     healthListPreview: booleanOrDefault(
       value.healthListPreview,
@@ -256,11 +303,26 @@ export function normalizeSettings(value: unknown): ExtensionSettings {
       health: booleanOrDefault(features.health, DEFAULT_SETTINGS.features.health),
       industry: booleanOrDefault(features.industry, DEFAULT_SETTINGS.features.industry),
       renewals: booleanOrDefault(features.renewals, DEFAULT_SETTINGS.features.renewals),
+      shareLinks: booleanOrDefault(features.shareLinks, DEFAULT_SETTINGS.features.shareLinks),
     },
     successToasts: {
       health: booleanOrDefault(successToasts.health, DEFAULT_SETTINGS.successToasts.health),
       industry: booleanOrDefault(successToasts.industry, DEFAULT_SETTINGS.successToasts.industry),
       renewals: booleanOrDefault(successToasts.renewals, DEFAULT_SETTINGS.successToasts.renewals),
+      shareLinks: booleanOrDefault(
+        successToasts.shareLinks,
+        DEFAULT_SETTINGS.successToasts.shareLinks,
+      ),
+    },
+    shareLinkTargets: {
+      renewalQuotations: booleanOrDefault(
+        shareLinkTargets.renewalQuotations,
+        DEFAULT_SETTINGS.shareLinkTargets.renewalQuotations,
+      ),
+      salesQuotations: booleanOrDefault(
+        shareLinkTargets.salesQuotations,
+        DEFAULT_SETTINGS.shareLinkTargets.salesQuotations,
+      ),
     },
     renewalDefaults: {
       discountTenthsByYears: normalizeRenewalDiscounts(renewalDefaults.discountTenthsByYears),
@@ -278,10 +340,25 @@ export async function getSettings(): Promise<ExtensionSettings> {
     (value) => value !== undefined,
   );
   const base = normalizeSettings(current ?? legacy);
-  const settings = applyStoredFieldOverrides(base, stored);
+  const storedWithLegacyOverrides = { ...stored };
+  const hasLegacyV4FieldOverrides = LEGACY_V4_FIELD_STORAGE_KEYS.some(
+    (key) => stored[key] !== undefined,
+  );
+  if (current === undefined) {
+    for (const [index, currentKey] of SETTINGS_FIELD_KEYS.entries()) {
+      const legacyKey = LEGACY_V4_FIELD_STORAGE_KEYS[index];
+      if (legacyKey && stored[legacyKey] !== undefined) {
+        storedWithLegacyOverrides[currentKey] = stored[legacyKey];
+      }
+    }
+  }
+  const settings = applyStoredFieldOverrides(base, storedWithLegacyOverrides);
   const repairs: Record<string, unknown> = {};
-  if ((current === undefined && legacy !== undefined) || hasStoredNonZeroOneYearDiscount(current)) {
-    repairs[SETTINGS_STORAGE_KEY] = base;
+  if (
+    (current === undefined && (legacy !== undefined || hasLegacyV4FieldOverrides)) ||
+    hasStoredNonZeroOneYearDiscount(current)
+  ) {
+    repairs[SETTINGS_STORAGE_KEY] = settings;
   }
   const oneYearOverrideKey = SETTINGS_FIELD_STORAGE_KEYS.renewalDiscounts[1];
   if (stored[oneYearOverrideKey] !== undefined && stored[oneYearOverrideKey] !== 0) {
@@ -302,12 +379,18 @@ function getFieldStoragePatch(
   if (patch.healthListPreview !== undefined) {
     storedPatch[SETTINGS_FIELD_STORAGE_KEYS.healthListPreview] = next.healthListPreview;
   }
-  for (const feature of ['health', 'industry', 'renewals'] as const) {
+  for (const feature of ['health', 'industry', 'renewals', 'shareLinks'] as const) {
     if (patch.features?.[feature] !== undefined) {
       storedPatch[SETTINGS_FIELD_STORAGE_KEYS.features[feature]] = next.features[feature];
     }
     if (patch.successToasts?.[feature] !== undefined) {
       storedPatch[SETTINGS_FIELD_STORAGE_KEYS.successToasts[feature]] = next.successToasts[feature];
+    }
+  }
+  for (const target of ['renewalQuotations', 'salesQuotations'] as const) {
+    if (patch.shareLinkTargets?.[target] !== undefined) {
+      storedPatch[SETTINGS_FIELD_STORAGE_KEYS.shareLinkTargets[target]] =
+        next.shareLinkTargets[target];
     }
   }
   for (const year of RENEWAL_YEARS) {

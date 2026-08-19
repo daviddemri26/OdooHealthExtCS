@@ -16,6 +16,7 @@ import {
   type CustomerDataSubscriptionState,
 } from './customer-data-contracts';
 import { RenewalOwnershipRegistry, executeOdooRenewalOperation } from './renewal-runtime';
+import { executeOdooQuoteShareOperation } from './share-link-runtime';
 
 interface JsonRpcSuccess {
   jsonrpc: '2.0';
@@ -765,13 +766,18 @@ export function installOdooBridge(pageWindow: Window = window): () => void {
         ? executeOdooConnectionProbe({ requestId: request.requestId })
         : request.kind === 'customerData'
           ? executeOdooCustomerDataOperation(request.operation, { requestId: request.requestId })
-          : request.kind === 'renewal'
-            ? executeOdooRenewalOperation(request.operation, {
+          : request.kind === 'quoteShare'
+            ? executeOdooQuoteShareOperation(request.operation, {
                 requestId: request.requestId,
-                clientId: request.clientId,
-                ownership: renewalOwnership,
+                getPathname: () => pageWindow.location.pathname,
               })
-            : executeOdooBridgeCall(request.call, { requestId: request.requestId });
+            : request.kind === 'renewal'
+              ? executeOdooRenewalOperation(request.operation, {
+                  requestId: request.requestId,
+                  clientId: request.clientId,
+                  ownership: renewalOwnership,
+                })
+              : executeOdooBridgeCall(request.call, { requestId: request.requestId });
     void execution.then((result) => {
       if (controller.signal.aborted) return;
       const response: OdooBridgeResponse = {

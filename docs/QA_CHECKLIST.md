@@ -7,7 +7,7 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] `pnpm package` succeeds on Node 22 and pnpm 10.
 - [ ] Unit and DOM tests pass.
 - [ ] Renewal reconciliation stress tests pass repeatedly, including the zero-budget first-read scenario.
-- [ ] Chrome and Firefox manifests are MV3, request only `storage`, and contain exactly two scripts matching only `https://www.odoo.com/odoo*`: isolated UI at `document_idle` and `MAIN` bridge at `document_start`.
+- [ ] Chrome and Firefox manifests are MV3, request only `storage` and `clipboardWrite`, and contain exactly two scripts matching only `https://www.odoo.com/odoo*`: isolated UI at `document_idle` and `MAIN` bridge at `document_start`.
 - [ ] Firefox `web-ext lint` passes.
 - [ ] Sensitive-data scan passes.
 - [ ] Three deterministic ZIP files, checksums, and a release manifest exist; the manifest Git SHA and exact source entry list verify.
@@ -22,13 +22,14 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Browser back/forward, Odoo breadcrumbs, record next/previous, and repeated rerenders do not duplicate UI.
 - [ ] Health and Industry independently render for one exact `In Progress` or `Paused` badge and remain hidden for every other, missing, translated, or ambiguous badge.
 - [ ] Renewals remains absent or ineligible on Paused, including when the server state changes after the menu opens but before Create.
+- [ ] Share Links accepts Sales, Subscriptions, and nested technical `sale.order` renewal routes whose last active SPA model is the rendered `sale.order`; linked contacts, tasks, and unrelated roots remain excluded.
 
 ## RPC bridge
 
 - [ ] The isolated gateway completes one versioned bridge handshake and correlates concurrent requests independently.
 - [ ] Foreign origins, sources, clients, versions, stale request IDs, and malformed responses are ignored.
 - [ ] Every model, method, field, domain, and write shape outside the documented allow-list is rejected before fetch.
-- [ ] Generic writes and arbitrary button/action calls are rejected; only closed Health, Industry, and Renewals operations can mutate Odoo.
+- [ ] Generic writes and arbitrary button/action calls are rejected; only closed Health, Industry, Renewals, and Share Links operations can reach their reviewed server contracts.
 - [ ] Successful responses contain only allow-listed fields; errors contain no raw Odoo message, response body, or stack trace.
 - [ ] A signed nonzero safe-integer `sale.order.partner_id` is preserved in `res.partner` request IDs and sanitized response record IDs; zero and unsafe partner IDs are rejected.
 - [ ] Sale-order, tag, industry, and user IDs, plus every non-partner relation value, remain positive and reject zero or negative values.
@@ -89,6 +90,18 @@ Use sanitized synthetic fixtures for automated and visual testing. Use an approv
 - [ ] Share links stay only in tab memory and never appear in logs, storage, toast details, telemetry, or persisted test artifacts.
 - [ ] Copy link, Copy all, Open quote, and Open all run only from user clicks; blocked tabs are excluded from the success count and trigger a warning.
 - [ ] The split button and popover work in light/dark themes, with keyboard navigation, SPA rerenders, reduced motion, and the native Renew click preserved.
+
+## Share Links shortcut
+
+- [ ] The feature is disabled by default; enabling it selects Renewal Quotations, Sales Quotations, and the optional success confirmation.
+- [ ] Subscription and technical `sale.order` renewal routes require server `state` draft/sent and `subscription_state = 2_renewal`; other records remain hidden.
+- [ ] Sales routes accept every server-confirmed draft/sent quotation, including Success Packs, and reject confirmed, cancelled, or unsupported states.
+- [ ] The compact Share icon appears only after server preflight and creates no duplicate UI after Odoo SPA rerenders.
+- [ ] One click makes one link request, validates the exact same-origin `sale.order` URL, writes it once, and never opens or sends the Share dialog.
+- [ ] A pending click disables duplicates; navigation to another route suppresses the old clipboard write and toast.
+- [ ] Disabling either target hides only that target. Disabling success confirmation suppresses only success; errors remain visible.
+- [ ] The link and access token never enter settings, local storage, logs, errors, toast content, analytics, or persisted fixtures.
+- [ ] The extension never requests clipboard-read access or inspects existing clipboard content.
 
 ## Interface matrix
 

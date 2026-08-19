@@ -23,11 +23,12 @@ import type { ExtensionSettings } from '../src/shared/types';
 import { MockGateway } from './helpers/mock-gateway';
 
 const settings: ExtensionSettings = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   enabled: true,
   healthListPreview: true,
-  features: { health: true, industry: true, renewals: false },
-  successToasts: { health: true, industry: true, renewals: true },
+  features: { health: true, industry: true, renewals: false, shareLinks: false },
+  successToasts: { health: true, industry: true, renewals: true, shareLinks: true },
+  shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
   renewalDefaults: { discountTenthsByYears: { 1: 0, 2: 30, 3: 60, 4: 80, 5: 100 } },
   appearance: 'dark',
 };
@@ -207,8 +208,8 @@ describe('optimistic Odoo controls', () => {
     const applyHealthState = vi.spyOn(gateway, 'applyHealthState');
     const view = renderContent(gateway, {
       ...settings,
-      features: { health: true, industry: false, renewals: false },
-      successToasts: { health: false, industry: true, renewals: true },
+      features: { health: true, industry: false, renewals: false, shareLinks: false },
+      successToasts: { health: false, industry: true, renewals: true, shareLinks: true },
     });
     try {
       await waitFor(() =>
@@ -227,7 +228,7 @@ describe('optimistic Odoo controls', () => {
     gateway.reads['sale.order'] = [{ id: 42, tag_ids: [11, 12] }];
     const view = renderContent(gateway, {
       ...settings,
-      features: { health: true, industry: false, renewals: false },
+      features: { health: true, industry: false, renewals: false, shareLinks: false },
     });
     const warning = 'Multiple health tags were found. Choose one value to clean them up.';
     try {
@@ -254,7 +255,7 @@ describe('optimistic Odoo controls', () => {
     const gateway = configuredGateway();
     const view = renderContent(gateway, {
       ...settings,
-      successToasts: { health: true, industry: false, renewals: true },
+      successToasts: { health: true, industry: false, renewals: true, shareLinks: true },
     });
     try {
       await waitFor(() =>
@@ -301,7 +302,7 @@ describe('optimistic Odoo controls', () => {
     gateway.applyHealthState = vi.fn(() => mutation.promise);
     const view = renderContent(gateway, {
       ...settings,
-      features: { health: true, industry: false, renewals: false },
+      features: { health: true, industry: false, renewals: false, shareLinks: false },
     });
     try {
       await waitFor(() =>
@@ -331,7 +332,7 @@ describe('optimistic Odoo controls', () => {
     gateway.applyIndustry = vi.fn(() => mutation.promise);
     const view = renderContent(gateway, {
       ...settings,
-      features: { health: false, industry: true, renewals: false },
+      features: { health: false, industry: true, renewals: false, shareLinks: false },
     });
     try {
       await waitFor(() =>
@@ -371,7 +372,7 @@ describe('optimistic Odoo controls', () => {
       });
     const view = renderContent(gateway, {
       ...settings,
-      features: { health: true, industry: false, renewals: false },
+      features: { health: true, industry: false, renewals: false, shareLinks: false },
       successToasts: { ...settings.successToasts, health: false },
     });
     try {
@@ -418,7 +419,7 @@ describe('optimistic Odoo controls', () => {
       });
     const view = renderContent(gateway, {
       ...settings,
-      features: { health: false, industry: true, renewals: false },
+      features: { health: false, industry: true, renewals: false, shareLinks: false },
       successToasts: { ...settings.successToasts, industry: false },
     });
     try {
@@ -461,7 +462,10 @@ describe('optimistic Odoo controls', () => {
     const statusStore = new StatusStore();
     const view = renderContent(
       gateway,
-      { ...settings, features: { health: true, industry: false, renewals: false } },
+      {
+        ...settings,
+        features: { health: true, industry: false, renewals: false, shareLinks: false },
+      },
       statusStore,
     );
     try {
@@ -492,7 +496,10 @@ describe('optimistic Odoo controls', () => {
     const statusStore = new StatusStore();
     const view = renderContent(
       gateway,
-      { ...settings, features: { health: true, industry: false, renewals: false } },
+      {
+        ...settings,
+        features: { health: true, industry: false, renewals: false, shareLinks: false },
+      },
       statusStore,
     );
     try {
@@ -522,7 +529,10 @@ describe('optimistic Odoo controls', () => {
     const statusStore = new StatusStore();
     const view = renderContent(
       gateway,
-      { ...settings, features: { health: true, industry: false, renewals: false } },
+      {
+        ...settings,
+        features: { health: true, industry: false, renewals: false, shareLinks: false },
+      },
       statusStore,
     );
     try {

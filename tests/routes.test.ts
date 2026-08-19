@@ -6,12 +6,15 @@ import {
   findContractNumberAnchor,
   findOrderDateAnchor,
   getRenderedSubscriptionRoute,
+  getRenderedQuoteShareRoute,
   getRenderedSubscriptionStatusLabel,
   hasInProgressSubscriptionBadge,
   isAllowedOdooLocation,
   isExactSubscriptionRoute,
+  isExactQuoteShareRoute,
   isRenderedSubscriptionForm,
   parseSubscriptionRoute,
+  parseQuoteShareRoutePathname,
 } from '../src/odoo/routes';
 
 function location(
@@ -79,6 +82,66 @@ describe('Odoo route eligibility', () => {
     expect(isExactSubscriptionRoute(route, 42, '/odoo/subscriptions/42')).toBe(true);
     expect(isExactSubscriptionRoute(route, 43, '/odoo/subscriptions/42')).toBe(false);
     expect(isExactSubscriptionRoute(route, 42, '/odoo/sale.order/42')).toBe(false);
+  });
+
+  it('targets direct Sales quotations and nested Subscription renewal quotations', () => {
+    expect(parseQuoteShareRoutePathname('/odoo/sales/8170012')).toEqual({
+      model: 'sale.order',
+      recordId: 8_170_012,
+      pathname: '/odoo/sales/8170012',
+      target: 'sales_quotation',
+    });
+    expect(
+      parseQuoteShareRoutePathname('/odoo/subscriptions/6690030/sale.order/sale.order/8169620'),
+    ).toEqual({
+      model: 'sale.order',
+      recordId: 8_169_620,
+      pathname: '/odoo/subscriptions/6690030/sale.order/sale.order/8169620',
+      target: 'renewal_quotation',
+    });
+    expect(parseQuoteShareRoutePathname('/odoo/sale.order/7199099/sale.order/8175629')).toEqual({
+      model: 'sale.order',
+      recordId: 8_175_629,
+      pathname: '/odoo/sale.order/7199099/sale.order/8175629',
+      target: 'renewal_quotation',
+    });
+  });
+
+  it('rejects non-target roots and nested SPA routes ending on another model', () => {
+    expect(parseQuoteShareRoutePathname('/odoo/project.task/42')).toBeNull();
+    expect(parseQuoteShareRoutePathname('/odoo/sales/8170012/res.partner/15')).toBeNull();
+    expect(parseQuoteShareRoutePathname('/odoo/subscriptions/42/project.task/9')).toBeNull();
+    expect(parseQuoteShareRoutePathname('/odoo/sale.order/42/res.partner/15')).toBeNull();
+  });
+
+  it('requires a rendered sale-order form before exposing the Share shortcut', () => {
+    document.body.innerHTML = `
+      <div class="o_form_view">
+        <div name="partner_id"></div>
+      </div>`;
+    const rendered = getRenderedQuoteShareRoute(location('/odoo/sales/8170012'));
+    expect(rendered).toMatchObject({ recordId: 8_170_012, target: 'sales_quotation' });
+
+    document.querySelector('[name="partner_id"]')?.remove();
+    expect(getRenderedQuoteShareRoute(location('/odoo/sales/8170012'))).toBeNull();
+
+    document.body.innerHTML = `
+      <div class="o_form_view"></div>
+      <div name="partner_id"></div>`;
+    expect(getRenderedQuoteShareRoute(location('/odoo/sales/8170012'))).toBeNull();
+  });
+
+  it('keeps a Share request bound to its exact target, record, and pathname', () => {
+    const route = parseQuoteShareRoutePathname('/odoo/sales/8170012');
+    expect(isExactQuoteShareRoute(route, route!)).toBe(true);
+    expect(
+      isExactQuoteShareRoute(route, {
+        ...route!,
+        pathname: '/odoo/sales/8170013',
+        recordId: 8_170_013,
+      }),
+    ).toBe(false);
+    expect(isExactQuoteShareRoute(route, { ...route!, target: 'renewal_quotation' })).toBe(false);
   });
 
   it('accepts only an exact In Progress subscription badge', () => {

@@ -3,17 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, mergeSettingsPatch, normalizeSettings } from '../src/shared/settings';
 
 describe('extension settings', () => {
-  it('adds disabled renewals with editable presets and success confirmations by default', () => {
-    expect(DEFAULT_SETTINGS.schemaVersion).toBe(4);
+  it('adds disabled renewals and Share Links with safe defaults', () => {
+    expect(DEFAULT_SETTINGS.schemaVersion).toBe(5);
     expect(DEFAULT_SETTINGS.features).toEqual({
       health: true,
       industry: true,
       renewals: false,
+      shareLinks: false,
     });
     expect(DEFAULT_SETTINGS.successToasts).toEqual({
       health: true,
       industry: true,
       renewals: true,
+      shareLinks: true,
+    });
+    expect(DEFAULT_SETTINGS.shareLinkTargets).toEqual({
+      renewalQuotations: true,
+      salesQuotations: true,
     });
     expect(DEFAULT_SETTINGS.renewalDefaults.discountTenthsByYears).toEqual({
       1: 0,
@@ -36,11 +42,12 @@ describe('extension settings', () => {
         appearance: 'dark',
       }),
     ).toEqual({
-      schemaVersion: 4,
+      schemaVersion: 5,
       enabled: false,
       healthListPreview: true,
-      features: { health: false, industry: true, renewals: false },
-      successToasts: { health: false, industry: true, renewals: true },
+      features: { health: false, industry: true, renewals: false, shareLinks: false },
+      successToasts: { health: false, industry: true, renewals: true, shareLinks: true },
+      shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
       renewalDefaults: {
         discountTenthsByYears: { 1: 0, 2: 30, 3: 60, 4: 80, 5: 100 },
       },
@@ -59,11 +66,12 @@ describe('extension settings', () => {
         appearance: 'dark',
       }),
     ).toEqual({
-      schemaVersion: 4,
+      schemaVersion: 5,
       enabled: true,
       healthListPreview: false,
-      features: { health: true, industry: false, renewals: false },
-      successToasts: { health: true, industry: true, renewals: true },
+      features: { health: true, industry: false, renewals: false, shareLinks: false },
+      successToasts: { health: true, industry: true, renewals: true, shareLinks: true },
+      shareLinkTargets: { renewalQuotations: true, salesQuotations: true },
       renewalDefaults: {
         discountTenthsByYears: { 1: 0, 2: 30, 3: 60, 4: 80, 5: 100 },
       },

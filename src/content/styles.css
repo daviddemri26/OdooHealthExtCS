@@ -63,6 +63,66 @@ button {
   animation: panel-enter 160ms ease-out both;
 }
 
+.quote-share-stack {
+  display: flex;
+  width: auto;
+  padding: 4px 6px 5px;
+}
+
+.quote-share-button {
+  display: inline-flex;
+  width: 32px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+  color: var(--odoo-link-color, var(--accent));
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.quote-share-button:hover:not(:disabled),
+.quote-share-button:focus-visible:not(:disabled) {
+  color: #ffffff;
+  background: transparent;
+  outline: none;
+}
+
+.quote-share-button:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.quote-share-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.quote-share-button svg {
+  width: 19px;
+  height: 19px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.quote-share-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: quote-share-spin 700ms linear infinite;
+}
+
 .native-field-label,
 .native-field-value {
   min-width: 0;
@@ -483,6 +543,12 @@ button {
   }
 }
 
+@keyframes quote-share-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 900px) {
   .industry-popover {
     width: max-content;
@@ -497,5 +563,9 @@ button {
     scroll-behavior: auto !important;
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
+  }
+
+  .quote-share-spinner {
+    animation: none !important;
   }
 }

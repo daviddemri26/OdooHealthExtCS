@@ -14,6 +14,8 @@ import {
   parseCustomerDataUndoResult,
   parseHealthMutationResult,
   parseIndustryMutationResult,
+  parseQuoteShareEligibilityResult,
+  parseQuoteShareLinkResult,
   parseRenewalCreatedQuoteResult,
   parseRenewalDiscountApplyResult,
   parseRenewalDiscountClearResult,
@@ -48,6 +50,14 @@ import type {
   RenewalTargetYears,
 } from './renewal-contracts';
 import { RENEWAL_GATEWAY_TIMEOUT_MS } from './renewal-contracts';
+import {
+  QUOTE_SHARE_GATEWAY_TIMEOUT_MS,
+  type QuoteShareBridgeOperation,
+  type QuoteShareEligibilityResult,
+  type QuoteShareGateway,
+  type QuoteShareLinkResult,
+  type QuoteShareTarget,
+} from './share-link-contracts';
 
 export { RENEWAL_GATEWAY_TIMEOUT_MS } from './renewal-contracts';
 
@@ -69,6 +79,7 @@ type OutboundBridgeRequest =
   | { kind: 'probe' }
   | { kind: 'call'; call: OdooBridgeCall }
   | { kind: 'customerData'; operation: CustomerDataBridgeOperation }
+  | { kind: 'quoteShare'; operation: QuoteShareBridgeOperation }
   | { kind: 'renewal'; operation: RenewalBridgeOperation };
 
 export class OdooGatewayError extends Error {
@@ -88,7 +99,7 @@ function randomIdentifier(prefix: string): string {
 }
 
 export class PageContextOdooGateway
-  implements OdooGateway, CustomerDataMutationGateway, RenewalGateway
+  implements OdooGateway, CustomerDataMutationGateway, RenewalGateway, QuoteShareGateway
 {
   private readonly clientId = randomIdentifier('client');
   private readonly pending = new Map<string, PendingRequest>();
@@ -305,6 +316,38 @@ export class PageContextOdooGateway
     if (result !== true) throw this.incompatibleResponse();
   }
 
+  async inspectQuoteShareTarget(
+    quoteId: number,
+    target: QuoteShareTarget,
+    pathname: string,
+  ): Promise<QuoteShareEligibilityResult> {
+    const result = await this.quoteShare({
+      name: 'inspectQuoteShareTarget',
+      quoteId,
+      target,
+      pathname,
+    });
+    const parsed = parseQuoteShareEligibilityResult(result, quoteId, target);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
+  async getQuoteShareLink(
+    quoteId: number,
+    target: QuoteShareTarget,
+    pathname: string,
+  ): Promise<QuoteShareLinkResult> {
+    const result = await this.quoteShare({
+      name: 'getQuoteShareLink',
+      quoteId,
+      target,
+      pathname,
+    });
+    const parsed = parseQuoteShareLinkResult(result, quoteId, target);
+    if (!parsed) throw this.incompatibleResponse();
+    return parsed;
+  }
+
   async checkConnection(): Promise<OdooConnectionProbeResult> {
     await this.ensureReady();
     const result = await this.sendRequest({ kind: 'probe' }, this.timeoutMs, false);
@@ -377,6 +420,15 @@ export class PageContextOdooGateway
     );
   }
 
+  private async quoteShare(operation: QuoteShareBridgeOperation): Promise<unknown> {
+    await this.ensureReady();
+    return this.sendRequest(
+      { kind: 'quoteShare', operation },
+      Math.max(this.timeoutMs, QUOTE_SHARE_GATEWAY_TIMEOUT_MS),
+      false,
+    );
+  }
+
   private incompatibleResponse(): OdooGatewayError {
     const failure = bridgeFailure('incompatible_response');
     return new OdooGatewayError(failure.code, failure.message);
@@ -407,6 +459,8 @@ export class PageContextOdooGateway
       request = { ...base, kind: 'customerData', operation: requestBody.operation };
     } else if (requestBody.kind === 'renewal') {
       request = { ...base, kind: 'renewal', operation: requestBody.operation };
+    } else if (requestBody.kind === 'quoteShare') {
+      request = { ...base, kind: 'quoteShare', operation: requestBody.operation };
     } else {
       request = { ...base, kind: requestBody.kind };
     }

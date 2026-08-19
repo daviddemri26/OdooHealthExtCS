@@ -36,4 +36,4 @@ Run before requesting review:
 pnpm package
 ```
 
-Reviewers should confirm that both manifests have only the `storage` permission and only the required Odoo content-script match. Controlled real-Odoo writes belong in a noncritical validation record and must not be recorded in repository fixtures.
+Reviewers should confirm that both manifests have only the `storage` and `clipboardWrite` permissions and only the required Odoo content-script match. Clipboard access must remain write-only and user-triggered. Controlled real-Odoo writes belong in a noncritical validation record and must not be recorded in repository fixtures.
