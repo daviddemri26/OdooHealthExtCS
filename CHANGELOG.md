@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-08-19
+
 ### Added
 
 - Added an opt-in Share Links shortcut that copies Odoo's native Share URL in one click from server-confirmed Renewal Quotations and Sales quotations, including Success Packs.
